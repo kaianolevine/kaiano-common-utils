@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = kaiano_common_utils
+
+[report]
+fail_under = 90
+show_missing = True
