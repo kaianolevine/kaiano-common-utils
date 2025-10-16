@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "kaiano-common-utils"
+version = "0.0.0"
+description = "Common utility functions shared across Kaiano’s projects."
+authors = ["Kaiano Levine <kaiano@example.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "kaiano_common_utils", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.13"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.0"
+pytest-cov = "^6.2.1"
+black = "^25.1.0"
+flake8 = "^7.2.0"
+isort = "^5.13.2"
+mypy = "^1.11.2"
+pre-commit = "^4.2.0"
+coverage = "^7.10.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+branch = true
+source = ["kaiano_common_utils"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
