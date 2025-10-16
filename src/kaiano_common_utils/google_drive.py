@@ -1,12 +1,13 @@
 import io
+import os
+from typing import Dict, List
+
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+
 import kaiano_common_utils._google_credentials as google_api
 import kaiano_common_utils.google_sheets as google_sheets
 from kaiano_common_utils import logger as log
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-from typing import List, Dict
-import os
-from googleapiclient.errors import HttpError
-
 
 log = log.get_logger()
 FOLDER_CACHE = {}
@@ -237,7 +238,9 @@ def get_all_subfolders(drive_service, parent_folder_id: str) -> List[Dict]:
         raise
 
 
-def get_files_in_folder(service, folder_id, name_contains=None, mime_type=None, trashed=False):
+def get_files_in_folder(
+    service, folder_id, name_contains=None, mime_type=None, trashed=False
+):
     """Returns a list of files in a Google Drive folder, optionally filtering by name substring and MIME type."""
     query = f"'{folder_id}' in parents"
     if name_contains:
@@ -264,7 +267,9 @@ def get_files_in_folder(service, folder_id, name_contains=None, mime_type=None, 
 
 def download_file(service, file_id, destination_path):
     """Download a file from Google Drive by ID using the Drive API."""
-    log.debug(f"download_file called with file_id={file_id}, destination_path={destination_path}")
+    log.debug(
+        f"download_file called with file_id={file_id}, destination_path={destination_path}"
+    )
     log.info(f"Starting download for file_id={file_id} to {destination_path}")
 
     log.debug("Preparing request for file download")
@@ -313,7 +318,9 @@ def upload_to_drive(drive, filepath, parent_id):
     media = MediaFileUpload(filepath, mimetype="text/csv")
     uploaded = (
         drive.files()
-        .create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True)
+        .create(
+            body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
+        )
         .execute()
     )
     log.info(f"📄 Uploaded to Drive as Google Sheet: {filepath}")
@@ -366,7 +373,11 @@ def create_spreadsheet(
             log.info(
                 f"➕ No existing file named '{name}' — creating new one in parent {parent_folder_id}"
             )
-            file_metadata = {"name": name, "mimeType": mime_type, "parents": [parent_folder_id]}
+            file_metadata = {
+                "name": name,
+                "mimeType": mime_type,
+                "parents": [parent_folder_id],
+            }
             file = (
                 drive_service.files()
                 .create(body=file_metadata, fields="id", supportsAllDrives=True)
@@ -388,7 +399,10 @@ def move_file_to_folder(drive_service, file_id, folder_id):
     previous_parents = ",".join(file.get("parents", []))
     # Move the file to the new folder
     drive_service.files().update(
-        fileId=file_id, addParents=folder_id, removeParents=previous_parents, fields="id, parents"
+        fileId=file_id,
+        addParents=folder_id,
+        removeParents=previous_parents,
+        fields="id, parents",
     ).execute()
 
 
@@ -439,7 +453,11 @@ def find_or_create_file_by_name(
             log.info(
                 f"➕ No existing file named '{name}' — creating new one in parent {parent_folder_id}"
             )
-            file_metadata = {"name": name, "mimeType": mime_type, "parents": [parent_folder_id]}
+            file_metadata = {
+                "name": name,
+                "mimeType": mime_type,
+                "parents": [parent_folder_id],
+            }
             file = (
                 drive_service.files()
                 .create(body=file_metadata, fields="id", supportsAllDrives=True)
@@ -452,7 +470,9 @@ def find_or_create_file_by_name(
         raise
 
 
-def find_subfolder_id(service, parent_folder_id: str, subfolder_name: str) -> str | None:
+def find_subfolder_id(
+    service, parent_folder_id: str, subfolder_name: str
+) -> str | None:
     """
     Finds the ID of a subfolder with the given name inside the specified parent folder.
 

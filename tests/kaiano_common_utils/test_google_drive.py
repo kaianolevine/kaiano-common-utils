@@ -1,6 +1,8 @@
-import pytest
 from unittest.mock import Mock
+
+import pytest
 from googleapiclient.errors import HttpError
+
 from kaiano_common_utils import google_drive as gd
 
 
@@ -16,7 +18,10 @@ def clear_folder_cache():
 
 
 def test_get_drive_service(monkeypatch):
-    monkeypatch.setattr("core.google_drive.google_api.get_drive_client", lambda: "service")
+    monkeypatch.setattr(
+        "kaiano_common_utils.google_drive.google_api.get_drive_client",
+        lambda: "service",
+    )
     assert gd.get_drive_service() == "service"
 
 
@@ -92,7 +97,9 @@ def test_get_or_create_folder_uses_cache(monkeypatch):
 
 def test_get_or_create_folder_finds_existing(monkeypatch):
     service = Mock()
-    service.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "123"}]}
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "123"}]
+    }
     result = gd.get_or_create_folder("p", "name", service)
     assert result == "123"
 
@@ -100,7 +107,9 @@ def test_get_or_create_folder_finds_existing(monkeypatch):
 def test_get_or_create_folder_creates_new(monkeypatch):
     service = Mock()
     service.files.return_value.list.return_value.execute.return_value = {"files": []}
-    service.files.return_value.create.return_value.execute.return_value = {"id": "new_id"}
+    service.files.return_value.create.return_value.execute.return_value = {
+        "id": "new_id"
+    }
     result = gd.get_or_create_folder("p", "name", service)
     assert result == "new_id"
 
@@ -112,7 +121,9 @@ def test_get_or_create_folder_creates_new(monkeypatch):
 
 def test_get_or_create_subfolder_existing():
     service = Mock()
-    service.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "1"}]}
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "1"}]
+    }
     assert gd.get_or_create_subfolder(service, "parent", "sub") == "1"
 
 
@@ -130,7 +141,9 @@ def test_get_or_create_subfolder_creates_new():
 
 def test_get_file_by_name_found():
     s = Mock()
-    s.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "1"}]}
+    s.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "1"}]
+    }
     assert gd.get_file_by_name(s, "f", "name")["id"] == "1"
 
 
@@ -169,8 +182,12 @@ def test_get_all_subfolders_handles_http_error(monkeypatch):
 
 def test_get_files_in_folder_filters(monkeypatch):
     s = Mock()
-    s.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "1"}]}
-    files = gd.get_files_in_folder(s, "parent", name_contains="test", mime_type="text/csv")
+    s.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "1"}]
+    }
+    files = gd.get_files_in_folder(
+        s, "parent", name_contains="test", mime_type="text/csv"
+    )
     assert files[0]["id"] == "1"
 
 
@@ -238,7 +255,9 @@ def test_upload_to_drive_removes_sep(monkeypatch):
 
 def test_create_spreadsheet_existing(monkeypatch):
     s = Mock()
-    s.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "x"}]}
+    s.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "x"}]
+    }
     assert gd.create_spreadsheet(s, "Name", "Parent") == "x"
 
 
@@ -270,7 +289,9 @@ def test_move_file_to_folder(monkeypatch):
 
 def test_remove_file_from_root(monkeypatch):
     s = Mock()
-    s.files.return_value.get.return_value.execute.return_value = {"parents": ["root", "other"]}
+    s.files.return_value.get.return_value.execute.return_value = {
+        "parents": ["root", "other"]
+    }
     gd.remove_file_from_root(s, "file")
     s.files.return_value.update.assert_called()
 
@@ -289,7 +310,9 @@ def test_remove_file_from_root_no_root(monkeypatch):
 
 def test_find_or_create_file_by_name_existing(monkeypatch):
     s = Mock()
-    s.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "1"}]}
+    s.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "1"}]
+    }
     assert gd.find_or_create_file_by_name(s, "File", "Parent") == "1"
 
 
@@ -314,7 +337,9 @@ def test_find_or_create_file_by_name_http_error(monkeypatch):
 
 def test_find_subfolder_id_found(monkeypatch):
     s = Mock()
-    s.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "x"}]}
+    s.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "x"}]
+    }
     assert gd.find_subfolder_id(s, "parent", "sub") == "x"
 
 

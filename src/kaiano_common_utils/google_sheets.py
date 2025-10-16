@@ -1,7 +1,9 @@
+from typing import Any, Dict, List
+
+from googleapiclient.errors import HttpError
+
 from kaiano_common_utils import _google_credentials
 from kaiano_common_utils import logger as log
-from typing import Any, List, Dict
-from googleapiclient.errors import HttpError
 
 log = log.get_logger()
 
@@ -24,7 +26,9 @@ def get_or_create_sheet(service, spreadsheet_id: str, sheet_name: str) -> None:
     log.debug(f"Existing sheet titles: {sheet_titles}")
     if sheet_name not in sheet_titles:
         log.info(f"Creating new sheet tab: {sheet_name}")
-        add_sheet_body = {"requests": [{"addSheet": {"properties": {"title": sheet_name}}}]}
+        add_sheet_body = {
+            "requests": [{"addSheet": {"properties": {"title": sheet_name}}}]
+        }
         service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id, body=add_sheet_body
         ).execute()
@@ -34,9 +38,13 @@ def get_or_create_sheet(service, spreadsheet_id: str, sheet_name: str) -> None:
 
 
 def read_sheet(service, spreadsheet_id, range_name):
-    log.debug(f"read_sheet called with spreadsheet_id={spreadsheet_id}, range_name={range_name}")
+    log.debug(
+        f"read_sheet called with spreadsheet_id={spreadsheet_id}, range_name={range_name}"
+    )
 
-    log.debug(f"Calling Sheets API with spreadsheetId={spreadsheet_id}, range={range_name}")
+    log.debug(
+        f"Calling Sheets API with spreadsheetId={spreadsheet_id}, range={range_name}"
+    )
     result = (
         service.spreadsheets()
         .values()
@@ -58,7 +66,9 @@ def write_sheet(service, spreadsheet_id, range_name, values=None):
     else:
         log.debug("No values provided to write.")
 
-    log.debug(f"Calling Sheets API with spreadsheetId={spreadsheet_id}, range={range_name}")
+    log.debug(
+        f"Calling Sheets API with spreadsheetId={spreadsheet_id}, range={range_name}"
+    )
     body = {"values": values}
     result = (
         service.spreadsheets()
@@ -71,7 +81,9 @@ def write_sheet(service, spreadsheet_id, range_name, values=None):
         )
         .execute()
     )
-    log.info(f"write_sheet updated range {range_name} with {len(values) if values else 0} rows")
+    log.info(
+        f"write_sheet updated range {range_name} with {len(values) if values else 0} rows"
+    )
     return result
 
 
@@ -98,7 +110,9 @@ def append_rows(service, spreadsheet_id: str, range_name: str, values: list) -> 
 
 
 def log_info_sheet(service, spreadsheet_id: str, message: str):
-    log.debug(f"log_info called with spreadsheet_id={spreadsheet_id}, message={message}")
+    log.debug(
+        f"log_info called with spreadsheet_id={spreadsheet_id}, message={message}"
+    )
     get_or_create_sheet(service, spreadsheet_id, "Info")
     log.info(f"Logging to Info: {message}")
     append_rows(service, spreadsheet_id, "Info!A1", [[message]])
@@ -118,7 +132,9 @@ def ensure_sheet_exists(
             write_sheet(service, spreadsheet_id, f"{sheet_name}!A1", [headers])
             log.info(f"Wrote headers to sheet '{sheet_name}': {headers}")
         else:
-            log.debug(f"Headers already present in sheet '{sheet_name}'; no write needed.")
+            log.debug(
+                f"Headers already present in sheet '{sheet_name}'; no write needed."
+            )
 
 
 # Function to fetch spreadsheet metadata
@@ -198,7 +214,9 @@ def sort_sheet_by_column(
             break
 
     if sheet_id is None:
-        raise ValueError(f"Sheet '{sheet_name}' not found in spreadsheet {spreadsheet_id}")
+        raise ValueError(
+            f"Sheet '{sheet_name}' not found in spreadsheet {spreadsheet_id}"
+        )
 
     sort_spec = {
         "dimensionIndex": column_index,
@@ -212,7 +230,9 @@ def sort_sheet_by_column(
     if end_row is not None:
         sort_range["endRowIndex"] = end_row
 
-    request_body = {"requests": [{"sortRange": {"range": sort_range, "sortSpecs": [sort_spec]}}]}
+    request_body = {
+        "requests": [{"sortRange": {"range": sort_range, "sortSpecs": [sort_spec]}}]
+    }
 
     log.info(
         f"Sorting sheet '{sheet_name}' on column {column_index} ({'ASC' if ascending else 'DESC'})"
@@ -251,10 +271,14 @@ def rename_sheet(sheets_service, spreadsheet_id, sheet_id, new_title):
             }
         ]
     }
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
-def insert_rows(sheets_service, spreadsheet_id: str, sheet_name: str, values: List[List]):
+def insert_rows(
+    sheets_service, spreadsheet_id: str, sheet_name: str, values: List[List]
+):
     """
     Inserts rows into the specified sheet (overwrites the range starting at A1).
     Uses USER_ENTERED so formulas like HYPERLINK() are written as formulas.
@@ -266,7 +290,10 @@ def insert_rows(sheets_service, spreadsheet_id: str, sheet_name: str, values: Li
         range_ = f"{sheet_name}!A1"
         body = {"values": values}
         sheets_service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id, range=range_, valueInputOption="USER_ENTERED", body=body
+            spreadsheetId=spreadsheet_id,
+            range=range_,
+            valueInputOption="USER_ENTERED",
+            body=body,
         ).execute()
         log.info("✅ Rows inserted successfully")
     except HttpError as error:
@@ -280,7 +307,9 @@ def get_spreadsheet_metadata(sheets_service, spreadsheet_id: str) -> Dict:
     """
     log.info(f"🔍 Retrieving spreadsheet metadata for ID {spreadsheet_id}")
     try:
-        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        spreadsheet = (
+            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        )
         return spreadsheet
     except HttpError as error:
         log.error(f"An error occurred while retrieving spreadsheet metadata: {error}")
@@ -288,7 +317,11 @@ def get_spreadsheet_metadata(sheets_service, spreadsheet_id: str) -> Dict:
 
 
 def write_sheet_data(
-    sheet_service, spreadsheet_id: str, sheet_name: str, header: List[str], rows: List[List[Any]]
+    sheet_service,
+    spreadsheet_id: str,
+    sheet_name: str,
+    header: List[str],
+    rows: List[List[Any]],
 ) -> None:
     """
     Overwrites the specified sheet in the given spreadsheet with the provided header and rows.
@@ -318,7 +351,10 @@ def write_sheet_data(
 
     # Write new data
     sheet_service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id, range=f"{sheet_name}!A1", valueInputOption="RAW", body=body
+        spreadsheetId=spreadsheet_id,
+        range=f"{sheet_name}!A1",
+        valueInputOption="RAW",
+        body=body,
     ).execute()
 
 
@@ -347,9 +383,13 @@ def clear_all_except_one_sheet(sheets_service, spreadsheet_id: str, sheet_to_kee
     Deletes all sheets in the spreadsheet except the one specified.
     If the sheet_to_keep does not exist, creates it.
     """
-    log.info(f"🧹 Clearing all sheets except '{sheet_to_keep}' in spreadsheet ID {spreadsheet_id}")
+    log.info(
+        f"🧹 Clearing all sheets except '{sheet_to_keep}' in spreadsheet ID {spreadsheet_id}"
+    )
     try:
-        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        spreadsheet = (
+            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        )
         sheets = spreadsheet.get("sheets", [])
         sheet_titles = [sheet["properties"]["title"] for sheet in sheets]
         requests = []
@@ -389,9 +429,13 @@ def clear_sheet(sheets_service, spreadsheet_id, sheet_name):
     if sheet_id is None:
         raise ValueError(f"Sheet name '{sheet_name}' not found in spreadsheet.")
 
-    body = {"requests": [{"updateCells": {"range": {"sheetId": sheet_id}, "fields": "*"}}]}
+    body = {
+        "requests": [{"updateCells": {"range": {"sheetId": sheet_id}, "fields": "*"}}]
+    }
 
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
 def delete_sheet_by_name(sheets_service, spreadsheet_id: str, sheet_name: str):
@@ -400,10 +444,14 @@ def delete_sheet_by_name(sheets_service, spreadsheet_id: str, sheet_name: str):
     """
     log.info(f"🗑️ Deleting sheet '{sheet_name}' if it exists")
     try:
-        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        spreadsheet = (
+            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        )
         sheets = spreadsheet.get("sheets", [])
         if len(sheets) <= 1:
-            log.warning(f"Not deleting sheet '{sheet_name}': spreadsheet only has one sheet.")
+            log.warning(
+                f"Not deleting sheet '{sheet_name}': spreadsheet only has one sheet."
+            )
             return
         sheet_id = None
         for sheet in sheets:
@@ -427,7 +475,9 @@ def delete_all_sheets_except(sheets_service, spreadsheet_id, sheet_to_keep):
     """
     Deletes all sheets except the one named sheet_to_keep.
     """
-    spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    spreadsheet = (
+        sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    )
     sheets = spreadsheet.get("sheets", [])
     requests = []
     for sheet in sheets:

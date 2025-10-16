@@ -1,9 +1,11 @@
-import io
-import pytz
 import datetime
+import io
+
+import pytz
 from googleapiclient.http import MediaIoBaseDownload
+
+from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
-import config
 
 log = log.get_logger()
 
@@ -76,7 +78,9 @@ def download_m3u_file(drive_service, file_id):
 
 
 def parse_m3u_lines(lines, existing_keys, file_date_str):
-    log.info(f"Parsing .m3u lines to extract entries with file_date_str: {file_date_str}")
+    log.info(
+        f"Parsing .m3u lines to extract entries with file_date_str: {file_date_str}"
+    )
     log.debug(f"Total lines received for parsing: {len(lines)}")
     tz = pytz.timezone(config.TIMEZONE)
     year, month, day = map(int, file_date_str.split("-"))
@@ -108,7 +112,13 @@ def parse_m3u_lines(lines, existing_keys, file_date_str):
                 key = "||".join(v.strip().lower() for v in [full_dt, title, artist])
                 if key not in existing_keys:
                     entries.append(
-                        [full_dt, title.strip(), artist.strip(), length.strip(), last_play.strip()]
+                        [
+                            full_dt,
+                            title.strip(),
+                            artist.strip(),
+                            length.strip(),
+                            last_play.strip(),
+                        ]
                     )
                     existing_keys.add(key)
                     log.debug(f"Appended new entry: {entries[-1]}")

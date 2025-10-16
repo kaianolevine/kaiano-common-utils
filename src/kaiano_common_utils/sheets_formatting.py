@@ -1,8 +1,9 @@
-from typing import Any, List, Dict
-import tools.dj_set_processor.helpers as helpers
-from kaiano_common_utils import logger as log
+from typing import Any, Dict, List
+
 from googleapiclient.errors import HttpError
-from kaiano_common_utils import google_sheets
+
+from kaiano_common_utils import google_sheets, helpers
+from kaiano_common_utils import logger as log
 
 
 def apply_sheet_formatting(sheet):
@@ -55,7 +56,9 @@ def apply_formatting_to_sheet(spreadsheet_id):
         log.error(f"Error applying formatting: {e}")
 
 
-def set_values(sheets_service, spreadsheet_id, sheet_name, start_row, start_col, values):
+def set_values(
+    sheets_service, spreadsheet_id, sheet_name, start_row, start_col, values
+):
     """
     Sets values in a sheet starting at (start_row, start_col).
     """
@@ -64,7 +67,10 @@ def set_values(sheets_service, spreadsheet_id, sheet_name, start_row, start_col,
     range_name = f"{sheet_name}!R{start_row}C{start_col}:R{end_row}C{end_col}"
     body = {"values": [[f"'{str(cell)}" for cell in row] for row in values]}
     sheets_service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id, range=range_name, valueInputOption="RAW", body=body
+        spreadsheetId=spreadsheet_id,
+        range=range_name,
+        valueInputOption="RAW",
+        body=body,
     ).execute()
 
 
@@ -90,7 +96,9 @@ def set_bold_font(
         }
     ]
     body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
 def freeze_rows(sheets_service, spreadsheet_id, sheet_id, num_rows):
@@ -109,7 +117,9 @@ def freeze_rows(sheets_service, spreadsheet_id, sheet_id, num_rows):
         }
     ]
     body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
 def set_horizontal_alignment(
@@ -141,11 +151,20 @@ def set_horizontal_alignment(
         }
     ]
     body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
 def set_number_format(
-    sheets_service, spreadsheet_id, sheet_id, start_row, end_row, start_col, end_col, format_str
+    sheets_service,
+    spreadsheet_id,
+    sheet_id,
+    start_row,
+    end_row,
+    start_col,
+    end_col,
+    format_str,
 ):
     """
     Sets number format for a range.
@@ -166,7 +185,9 @@ def set_number_format(
         }
     ]
     body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
 def auto_resize_columns(
@@ -227,7 +248,9 @@ def auto_resize_columns(
             ]
         }
 
-        service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id, body=body
+        ).execute()
     except HttpError as e:
         log.error(
             f"Auto-resize columns failed for sheet {sheet_id} cols {start_col}-{end_col}: {e}"
@@ -346,7 +369,11 @@ def set_sheet_formatting(
                         }
                     ],
                     "fields": "userEnteredFormat.backgroundColor",
-                    "start": {"sheetId": sheet_id, "rowIndex": row_idx, "columnIndex": 0},
+                    "start": {
+                        "sheetId": sheet_id,
+                        "rowIndex": row_idx,
+                        "columnIndex": 0,
+                    },
                 }
             }
             bg_requests.append(row_request)
@@ -369,16 +396,24 @@ def set_sheet_formatting(
     # Can't set max width directly via API; auto-resize only.
 
     body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body=body
+    ).execute()
 
 
-def set_column_formatting(sheets_service, spreadsheet_id: str, sheet_name: str, num_columns: int):
+def set_column_formatting(
+    sheets_service, spreadsheet_id: str, sheet_name: str, num_columns: int
+):
     """
     Sets formatting for specified columns (first column date, others text).
     """
-    log.info(f"🎨 Setting column formatting for {num_columns} columns in sheet '{sheet_name}'")
+    log.info(
+        f"🎨 Setting column formatting for {num_columns} columns in sheet '{sheet_name}'"
+    )
     try:
-        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        spreadsheet = (
+            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        )
         sheet_id = None
         for sheet in spreadsheet.get("sheets", []):
             if sheet["properties"]["title"] == sheet_name:
@@ -403,7 +438,10 @@ def set_column_formatting(sheets_service, spreadsheet_id: str, sheet_name: str, 
                         },
                         "cell": {
                             "userEnteredFormat": {
-                                "numberFormat": {"type": "DATE", "pattern": "yyyy-mm-dd"}
+                                "numberFormat": {
+                                    "type": "DATE",
+                                    "pattern": "yyyy-mm-dd",
+                                }
                             }
                         },
                         "fields": "userEnteredFormat.numberFormat",
@@ -422,7 +460,9 @@ def set_column_formatting(sheets_service, spreadsheet_id: str, sheet_name: str, 
                             "startColumnIndex": 1,
                             "endColumnIndex": num_columns,
                         },
-                        "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                        "cell": {
+                            "userEnteredFormat": {"numberFormat": {"type": "TEXT"}}
+                        },
                         "fields": "userEnteredFormat.numberFormat",
                     }
                 }
@@ -455,7 +495,8 @@ def reorder_sheets(
     try:
         sheets = spreadsheet_metadata.get("sheets", [])
         title_to_id = {
-            sheet["properties"]["title"]: sheet["properties"]["sheetId"] for sheet in sheets
+            sheet["properties"]["title"]: sheet["properties"]["sheetId"]
+            for sheet in sheets
         }
         requests = []
         index = 0
@@ -472,13 +513,18 @@ def reorder_sheets(
                 )
                 index += 1
         remaining_sheets = [
-            sheet for sheet in sheets if sheet["properties"]["title"] not in sheet_names_in_order
+            sheet
+            for sheet in sheets
+            if sheet["properties"]["title"] not in sheet_names_in_order
         ]
         for sheet in remaining_sheets:
             requests.append(
                 {
                     "updateSheetProperties": {
-                        "properties": {"sheetId": sheet["properties"]["sheetId"], "index": index},
+                        "properties": {
+                            "sheetId": sheet["properties"]["sheetId"],
+                            "index": index,
+                        },
                         "fields": "index",
                     }
                 }
@@ -496,7 +542,11 @@ def reorder_sheets(
 
 
 def format_summary_sheet(
-    sheet_service, spreadsheet_id: str, sheet_name: str, header: List[str], rows: List[List[Any]]
+    sheet_service,
+    spreadsheet_id: str,
+    sheet_name: str,
+    header: List[str],
+    rows: List[List[Any]],
 ) -> None:
     """
     Applies formatting to a summary sheet, such as:
@@ -513,7 +563,9 @@ def format_summary_sheet(
         header (List[str]): The list of column headers (used for column count).
         rows (List[List[Any]]): The data rows (used for row count).
     """
-    sheet_id = google_sheets.get_sheet_id_by_name(sheet_service, spreadsheet_id, sheet_name)
+    sheet_id = google_sheets.get_sheet_id_by_name(
+        sheet_service, spreadsheet_id, sheet_name
+    )
     requests = []
 
     num_columns = len(header)

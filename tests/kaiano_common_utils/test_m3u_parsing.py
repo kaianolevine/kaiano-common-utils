@@ -1,7 +1,8 @@
-import pytest
 from unittest import mock
-from kaiano_common_utils import m3u_parsing
-import config
+
+import pytest
+
+from kaiano_common_utils import config, m3u_parsing
 
 
 @pytest.fixture
@@ -42,7 +43,10 @@ def test_extract_tag_value_not_found():
 
 def test_get_most_recent_m3u_file_success(monkeypatch, mock_drive_service):
     mock_drive_service.files.return_value.list.return_value.execute.return_value = {
-        "files": [{"id": "1", "name": "2024-01-01.m3u"}, {"id": "2", "name": "2024-01-02.m3u"}]
+        "files": [
+            {"id": "1", "name": "2024-01-01.m3u"},
+            {"id": "2", "name": "2024-01-02.m3u"},
+        ]
     }
     monkeypatch.setattr(config, "VDJ_HISTORY_FOLDER_ID", "folder123")
 
@@ -51,7 +55,9 @@ def test_get_most_recent_m3u_file_success(monkeypatch, mock_drive_service):
 
 
 def test_get_most_recent_m3u_file_empty(monkeypatch, mock_drive_service):
-    mock_drive_service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    mock_drive_service.files.return_value.list.return_value.execute.return_value = {
+        "files": []
+    }
     monkeypatch.setattr(config, "VDJ_HISTORY_FOLDER_ID", "folder123")
 
     result = m3u_parsing.get_most_recent_m3u_file(mock_drive_service)
@@ -68,7 +74,10 @@ def test_download_m3u_file_success(monkeypatch, mock_drive_service):
     progress.progress.return_value = 1.0
     fake_downloader.next_chunk.side_effect = [(progress, True)]
 
-    monkeypatch.setattr("core.m3u_parsing.MediaIoBaseDownload", lambda fh, req: fake_downloader)
+    monkeypatch.setattr(
+        "kaiano_common_utils.m3u_parsing.MediaIoBaseDownload",
+        lambda fh, req: fake_downloader,
+    )
     mock_drive_service.files.return_value.get_media.return_value = mock.Mock()
 
     # The function should run without raising errors.
@@ -82,7 +91,10 @@ def test_download_m3u_file_partial_progress(monkeypatch, mock_drive_service):
     s1.progress.return_value = 0.5
     s2.progress.return_value = 1.0
     fake_downloader.next_chunk.side_effect = [(s1, False), (s2, True)]
-    monkeypatch.setattr("core.m3u_parsing.MediaIoBaseDownload", lambda fh, req: fake_downloader)
+    monkeypatch.setattr(
+        "kaiano_common_utils.m3u_parsing.MediaIoBaseDownload",
+        lambda fh, req: fake_downloader,
+    )
     mock_drive_service.files.return_value.get_media.return_value = mock.Mock()
 
     lines = m3u_parsing.download_m3u_file(mock_drive_service, "file123")

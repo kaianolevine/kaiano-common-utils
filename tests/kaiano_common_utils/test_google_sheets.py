@@ -1,8 +1,9 @@
-import pytest
 from unittest.mock import Mock
-from googleapiclient.errors import HttpError
-from kaiano_common_utils import google_sheets as gs
 
+import pytest
+from googleapiclient.errors import HttpError
+
+from kaiano_common_utils import google_sheets as gs
 
 # =====================================================
 # Fixtures and helpers
@@ -34,14 +35,16 @@ def fake_metadata():
 
 def test_get_sheets_service(monkeypatch):
     monkeypatch.setattr(
-        "core.google_sheets._google_credentials.get_sheets_client", lambda: "client"
+        "kaiano_common_utils.google_sheets._google_credentials.get_sheets_client",
+        lambda: "client",
     )
     assert gs.get_sheets_service() == "client"
 
 
 def test_get_gspread_client(monkeypatch):
     monkeypatch.setattr(
-        "core.google_sheets._google_credentials.get_gspread_client", lambda: "gclient"
+        "kaiano_common_utils.google_sheets._google_credentials.get_gspread_client",
+        lambda: "gclient",
     )
     assert gs.get_gspread_client() == "gclient"
 
@@ -74,19 +77,25 @@ def test_get_or_create_sheet_noop_if_exists(mock_service):
 
 
 def test_read_sheet_returns_values(mock_service):
-    mock_service.spreadsheets().values().get().execute.return_value = {"values": [["A", "B"]]}
+    mock_service.spreadsheets().values().get().execute.return_value = {
+        "values": [["A", "B"]]
+    }
     result = gs.read_sheet(mock_service, "id", "Sheet1!A1:B2")
     assert result == [["A", "B"]]
 
 
 def test_write_sheet_sends_values(mock_service):
-    mock_service.spreadsheets().values().update().execute.return_value = {"updatedRows": 1}
+    mock_service.spreadsheets().values().update().execute.return_value = {
+        "updatedRows": 1
+    }
     result = gs.write_sheet(mock_service, "id", "Sheet1!A1", [["x"]])
     assert "updatedRows" in result
 
 
 def test_append_rows_appends(mock_service):
-    mock_service.spreadsheets().values().append().execute.return_value = {"updates": "ok"}
+    mock_service.spreadsheets().values().append().execute.return_value = {
+        "updates": "ok"
+    }
     gs.append_rows(mock_service, "id", "Sheet1!A1", [["a"]])
     mock_service.spreadsheets().values().append.assert_called()
 
@@ -98,7 +107,9 @@ def test_append_rows_appends(mock_service):
 
 def test_log_info_sheet_calls_append(monkeypatch, mock_service):
     monkeypatch.setattr(gs, "get_or_create_sheet", lambda s, i, n: None)
-    monkeypatch.setattr(gs, "append_rows", lambda s, i, r, v: setattr(s, "called", True))
+    monkeypatch.setattr(
+        gs, "append_rows", lambda s, i, r, v: setattr(s, "called", True)
+    )
     gs.log_info_sheet(mock_service, "id", "message")
     assert hasattr(mock_service, "called")
 
@@ -111,7 +122,9 @@ def test_log_info_sheet_calls_append(monkeypatch, mock_service):
 def test_ensure_sheet_exists_writes_headers(monkeypatch, mock_service):
     monkeypatch.setattr(gs, "get_or_create_sheet", lambda s, i, n: None)
     monkeypatch.setattr(gs, "read_sheet", lambda s, i, r: [])
-    monkeypatch.setattr(gs, "write_sheet", lambda s, i, r, v: setattr(s, "called", True))
+    monkeypatch.setattr(
+        gs, "write_sheet", lambda s, i, r, v: setattr(s, "called", True)
+    )
     gs.ensure_sheet_exists(mock_service, "id", "Sheet1", ["A", "B"])
     assert hasattr(mock_service, "called")
 
@@ -120,7 +133,9 @@ def test_ensure_sheet_exists_no_write_if_headers_present(monkeypatch, mock_servi
     monkeypatch.setattr(gs, "get_or_create_sheet", lambda s, i, n: None)
     monkeypatch.setattr(gs, "read_sheet", lambda s, i, r: [["A", "B"]])
     monkeypatch.setattr(
-        gs, "write_sheet", lambda s, i, r, v: (_ for _ in ()).throw(Exception("should not write"))
+        gs,
+        "write_sheet",
+        lambda s, i, r, v: (_ for _ in ()).throw(Exception("should not write")),
     )
     gs.ensure_sheet_exists(mock_service, "id", "Sheet1", ["A", "B"])
 
@@ -143,7 +158,9 @@ def test_get_sheet_metadata_returns_metadata(mock_service, fake_metadata):
 
 def test_update_row(monkeypatch):
     fake_service = Mock()
-    fake_service.spreadsheets().values().update().execute.return_value = {"updated": True}
+    fake_service.spreadsheets().values().update().execute.return_value = {
+        "updated": True
+    }
     monkeypatch.setattr(gs, "get_sheets_service", lambda: fake_service)
     result = gs.update_row("id", "A1:B1", [["x", "y"]])
     assert result["updated"]
@@ -251,7 +268,9 @@ def test_write_sheet_data(monkeypatch, mock_service):
 
 
 def test_get_sheet_values_returns_normalized(mock_service):
-    mock_service.spreadsheets().values().get().execute.return_value = {"values": [[1, None, "X"]]}
+    mock_service.spreadsheets().values().get().execute.return_value = {
+        "values": [[1, None, "X"]]
+    }
     result = gs.get_sheet_values(mock_service, "id", "Sheet1")
     assert result == [["1", "", "X"]]
 

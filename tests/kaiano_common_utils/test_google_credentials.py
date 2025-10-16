@@ -1,12 +1,15 @@
 import json
 from unittest import mock
+
 from kaiano_common_utils import _google_credentials
 
 
 # -----------------------------
 # _load_credentials
 # -----------------------------
-@mock.patch("core._google_credentials.service_account.Credentials.from_service_account_info")
+@mock.patch(
+    "kaiano_common_utils._google_credentials.service_account.Credentials.from_service_account_info"
+)
 def test_load_credentials_from_env_valid(mock_from_info, monkeypatch):
     fake_creds = mock.Mock()
     mock_from_info.return_value = fake_creds
@@ -18,7 +21,9 @@ def test_load_credentials_from_env_valid(mock_from_info, monkeypatch):
     mock_from_info.assert_called_once()
 
 
-@mock.patch("core._google_credentials.service_account.Credentials.from_service_account_file")
+@mock.patch(
+    "kaiano_common_utils._google_credentials.service_account.Credentials.from_service_account_file"
+)
 def test_load_credentials_from_env_invalid_json(mock_from_file, monkeypatch):
     monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", "not-json")
     result = _google_credentials._load_credentials()
@@ -26,7 +31,9 @@ def test_load_credentials_from_env_invalid_json(mock_from_file, monkeypatch):
     assert result == mock_from_file.return_value
 
 
-@mock.patch("core._google_credentials.service_account.Credentials.from_service_account_file")
+@mock.patch(
+    "kaiano_common_utils._google_credentials.service_account.Credentials.from_service_account_file"
+)
 def test_load_credentials_from_env_not_dict(mock_from_file, monkeypatch):
     monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", json.dumps(["not", "dict"]))
     result = _google_credentials._load_credentials()
@@ -35,7 +42,9 @@ def test_load_credentials_from_env_not_dict(mock_from_file, monkeypatch):
 
 
 @mock.patch("os.path.exists", return_value=True)
-@mock.patch("core._google_credentials.service_account.Credentials.from_service_account_file")
+@mock.patch(
+    "kaiano_common_utils._google_credentials.service_account.Credentials.from_service_account_file"
+)
 def test_load_credentials_no_env(mock_from_file, mock_exists, monkeypatch):
     monkeypatch.delenv("GOOGLE_CREDENTIALS_JSON", raising=False)
     result = _google_credentials._load_credentials()
@@ -44,9 +53,13 @@ def test_load_credentials_no_env(mock_from_file, mock_exists, monkeypatch):
 
 
 @mock.patch("os.path.exists", return_value=True)
-@mock.patch("core._google_credentials.service_account.Credentials.from_service_account_file")
+@mock.patch(
+    "kaiano_common_utils._google_credentials.service_account.Credentials.from_service_account_file"
+)
 def test_load_credentials_env_with_type_error(mock_from_file, mock_exists, monkeypatch):
-    invalid_json = '{"type": "service_account", "project_id": 123'  # Missing closing brace
+    invalid_json = (
+        '{"type": "service_account", "project_id": 123'  # Missing closing brace
+    )
     monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", invalid_json)
     result = _google_credentials._load_credentials()
     mock_from_file.assert_called_once_with("credentials.json", scopes=mock.ANY)
@@ -56,8 +69,8 @@ def test_load_credentials_env_with_type_error(mock_from_file, mock_exists, monke
 # -----------------------------
 # get_drive_client
 # -----------------------------
-@mock.patch("core._google_credentials.build")
-@mock.patch("core._google_credentials._load_credentials")
+@mock.patch("kaiano_common_utils._google_credentials.build")
+@mock.patch("kaiano_common_utils._google_credentials._load_credentials")
 def test_get_drive_client(mock_load, mock_build):
     mock_creds = mock.Mock()
     mock_load.return_value = mock_creds
@@ -73,8 +86,8 @@ def test_get_drive_client(mock_load, mock_build):
 # -----------------------------
 # get_sheets_client
 # -----------------------------
-@mock.patch("core._google_credentials.build")
-@mock.patch("core._google_credentials._load_credentials")
+@mock.patch("kaiano_common_utils._google_credentials.build")
+@mock.patch("kaiano_common_utils._google_credentials._load_credentials")
 def test_get_sheets_client(mock_load, mock_build):
     mock_creds = mock.Mock()
     mock_load.return_value = mock_creds
@@ -90,8 +103,8 @@ def test_get_sheets_client(mock_load, mock_build):
 # -----------------------------
 # get_gspread_client
 # -----------------------------
-@mock.patch("core._google_credentials.gspread.authorize")
-@mock.patch("core._google_credentials._load_credentials")
+@mock.patch("kaiano_common_utils._google_credentials.gspread.authorize")
+@mock.patch("kaiano_common_utils._google_credentials._load_credentials")
 def test_get_gspread_client(mock_load, mock_auth):
     mock_creds = mock.Mock()
     mock_load.return_value = mock_creds
@@ -107,9 +120,13 @@ def test_get_gspread_client(mock_load, mock_auth):
 # -----------------------------
 # Logging behavior
 # -----------------------------
-@mock.patch("core._google_credentials.service_account.Credentials.from_service_account_file")
-@mock.patch("core._google_credentials.log.warning")
-def test_load_credentials_logs_warning_for_invalid_json(mock_warn, mock_file, monkeypatch):
+@mock.patch(
+    "kaiano_common_utils._google_credentials.service_account.Credentials.from_service_account_file"
+)
+@mock.patch("kaiano_common_utils._google_credentials.log.warning")
+def test_load_credentials_logs_warning_for_invalid_json(
+    mock_warn, mock_file, monkeypatch
+):
     monkeypatch.setenv("GOOGLE_CREDENTIALS_JSON", "{invalid}")
     _google_credentials._load_credentials()
     mock_warn.assert_called()

@@ -1,6 +1,7 @@
 from spotipy import Spotify
-from spotipy.oauth2 import SpotifyOAuth, CacheHandler
-import config
+from spotipy.oauth2 import CacheHandler, SpotifyOAuth
+
+from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
 
 log = log.get_logger()
@@ -75,7 +76,9 @@ def search_track(artist, title):
 def add_tracks_to_playlist(uris):
     log.debug(f"[add_tracks_to_playlist] Called with uris={uris}")
     if not config.SPOTIFY_PLAYLIST_ID:
-        log.error("[add_tracks_to_playlist] Missing SPOTIFY_PLAYLIST_ID environment variable.")
+        log.error(
+            "[add_tracks_to_playlist] Missing SPOTIFY_PLAYLIST_ID environment variable."
+        )
         raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
     if not uris:
         log.info("[add_tracks_to_playlist] No tracks to add.")
@@ -95,7 +98,9 @@ def add_tracks_to_playlist(uris):
 def trim_playlist_to_limit(limit=200):
     log.debug(f"[trim_playlist_to_limit] Called with limit={limit}")
     if not config.SPOTIFY_PLAYLIST_ID:
-        log.error("[trim_playlist_to_limit] Missing SPOTIFY_PLAYLIST_ID environment variable.")
+        log.error(
+            "[trim_playlist_to_limit] Missing SPOTIFY_PLAYLIST_ID environment variable."
+        )
         raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
     sp = get_spotify_client_from_refresh()
     current = sp.playlist_items(
@@ -115,7 +120,9 @@ def trim_playlist_to_limit(limit=200):
     log.info(
         f"[trim_playlist_to_limit] Removing {num_to_remove} tracks from playlist ID {config.SPOTIFY_PLAYLIST_ID}."
     )
-    sp.playlist_remove_all_occurrences_of_items(config.SPOTIFY_PLAYLIST_ID, uris_to_remove)
+    sp.playlist_remove_all_occurrences_of_items(
+        config.SPOTIFY_PLAYLIST_ID, uris_to_remove
+    )
     log.info(
         f"[trim_playlist_to_limit] Removed {len(uris_to_remove)} old tracks to stay under {limit}."
     )

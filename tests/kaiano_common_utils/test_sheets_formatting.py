@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import Mock
-from googleapiclient.errors import HttpError
-from kaiano_common_utils import sheets_formatting as sf
 
+import pytest
+from googleapiclient.errors import HttpError
+
+from kaiano_common_utils import helpers
+from kaiano_common_utils import sheets_formatting as sf
 
 # =====================================================
 # Fixtures
@@ -47,7 +49,9 @@ def test_apply_formatting_to_sheet_success(monkeypatch):
     sh = Mock(sheet1=sheet)
     gc = Mock(open_by_key=lambda k: sh)
     monkeypatch.setattr(sf.google_sheets, "get_gspread_client", lambda: gc)
-    monkeypatch.setattr(sf, "apply_sheet_formatting", lambda s: setattr(s, "called", True))
+    monkeypatch.setattr(
+        sf, "apply_sheet_formatting", lambda s: setattr(s, "called", True)
+    )
     sf.apply_formatting_to_sheet("spreadsheet_id")
     assert hasattr(sheet, "called")
 
@@ -64,7 +68,9 @@ def test_apply_formatting_to_sheet_empty(monkeypatch):
 
 def test_apply_formatting_to_sheet_exception(monkeypatch):
     monkeypatch.setattr(
-        sf.google_sheets, "get_gspread_client", lambda: (_ for _ in ()).throw(Exception("fail"))
+        sf.google_sheets,
+        "get_gspread_client",
+        lambda: (_ for _ in ()).throw(Exception("fail")),
     )
     sf.apply_formatting_to_sheet("id")  # Should log error but not raise
 
@@ -166,7 +172,9 @@ def test_update_sheet_values(mock_service):
 
 def test_set_sheet_formatting_builds_requests(monkeypatch, mock_service):
     monkeypatch.setattr(sf.google_sheets, "get_sheets_service", lambda: mock_service)
-    monkeypatch.setattr(sf.helpers, "hex_to_rgb", lambda c: {"red": 1, "green": 1, "blue": 1})
+    monkeypatch.setattr(
+        helpers, "hex_to_rgb", lambda c: {"red": 1, "green": 1, "blue": 1}
+    )
     sf.set_sheet_formatting(mock_service, "id", 1, 2, 3, [["#FFFFFF"], ["#000000"]])
     mock_service.spreadsheets().batchUpdate.assert_called()
 
@@ -198,7 +206,9 @@ def test_set_column_formatting_missing_sheet(monkeypatch, mock_service):
 
 
 def test_set_column_formatting_http_error(monkeypatch, mock_service):
-    mock_service.spreadsheets().get.side_effect = HttpError(resp=Mock(status=400), content=b"fail")
+    mock_service.spreadsheets().get.side_effect = HttpError(
+        resp=Mock(status=400), content=b"fail"
+    )
     monkeypatch.setattr(sf.log, "error", lambda m: None)
     with pytest.raises(HttpError):
         sf.set_column_formatting(mock_service, "id", "Sheet1", 3)
@@ -238,5 +248,7 @@ def test_reorder_sheets_http_error(monkeypatch, mock_service):
 
 def test_format_summary_sheet_calls_batch_update(monkeypatch, mock_service):
     monkeypatch.setattr(sf.google_sheets, "get_sheet_id_by_name", lambda s, i, n: 1)
-    sf.format_summary_sheet(mock_service, "id", "Sheet1", ["Col1", "Col2"], [["a", "b"]])
+    sf.format_summary_sheet(
+        mock_service, "id", "Sheet1", ["Col1", "Col2"], [["a", "b"]]
+    )
     mock_service.spreadsheets().batchUpdate.assert_called()

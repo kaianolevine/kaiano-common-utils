@@ -1,9 +1,11 @@
 # tests/test_core_spotify.py
 
-import pytest
 from unittest import mock
+
+import pytest
+
 import kaiano_common_utils.spotify as spotify
-import config
+from kaiano_common_utils import config
 
 
 def test_get_spotify_client_from_refresh_success(monkeypatch):
