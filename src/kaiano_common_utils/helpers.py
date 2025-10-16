@@ -5,7 +5,7 @@ from typing import Tuple
 
 from googleapiclient.errors import HttpError
 
-import kaiano_common_utils as google_api
+import kaiano_common_utils._google_credentials as google_api
 import kaiano_common_utils.google_drive as drive
 from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
