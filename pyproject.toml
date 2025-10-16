@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "kaiano_common_utils", from = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.13"
+python = ">=3.10,<4.0"
 gspread = "^6.0.2"
 google-auth = "^2.29.0"
 google-api-python-client = "^2.177.0"
