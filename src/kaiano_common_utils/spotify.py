@@ -127,3 +127,39 @@ def trim_playlist_to_limit(limit=200):
         f"[trim_playlist_to_limit] Removed {len(uris_to_remove)} old tracks to stay under {limit}."
     )
     print(f"🗑️ Removed {len(uris_to_remove)} old tracks to stay under {limit}.")
+
+
+def create_playlist(
+    name: str, description: str = "Generated automatically by Westie Radio"
+) -> str:
+    """
+    Create a new Spotify playlist with the given name.
+    Returns the playlist ID on success, or None on failure.
+    """
+    sp = get_spotify_client_from_refresh()
+    try:
+        user_id = sp.current_user()["id"]
+        playlist = sp.user_playlist_create(
+            user=user_id, name=name, public=False, description=description
+        )
+        playlist_id = playlist["id"]
+        log.debug(f"✅ Created Spotify playlist '{name}' (ID: {playlist_id})")
+        return playlist_id
+    except Exception as e:
+        log.debug(f"❌ Failed to create playlist '{name}': {e}")
+        return None
+
+
+def add_tracks_to_specific_playlist(playlist_id: str, track_uris: list[str]):
+    """
+    Add tracks to a specific Spotify playlist.
+    """
+    if not playlist_id or not track_uris:
+        log.debug("⚠️ No playlist_id or track URIs provided; skipping track addition.")
+        return
+    sp = get_spotify_client_from_refresh()
+    try:
+        sp.playlist_add_items(playlist_id, track_uris)
+        log.debug(f"🎶 Added {len(track_uris)} tracks to playlist {playlist_id}")
+    except Exception as e:
+        log.debug(f"❌ Failed to add tracks to playlist {playlist_id}: {e}")
