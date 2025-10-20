@@ -1,5 +1,3 @@
-# tests/test_core_spotify.py
-
 from unittest import mock
 
 import pytest
