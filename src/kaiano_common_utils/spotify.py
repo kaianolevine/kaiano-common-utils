@@ -1,3 +1,4 @@
+import spotipy
 from spotipy import Spotify
 from spotipy.oauth2 import CacheHandler, SpotifyOAuth
 
@@ -13,6 +14,21 @@ class NoopCacheHandler(CacheHandler):
 
     def save_token_to_cache(self, token_info):
         pass
+
+
+def get_spotify_client():
+    scope = "playlist-modify-public playlist-modify-private"
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyOAuth(
+            client_id=config.SPOTIFY_CLIENT_ID,
+            client_secret=config.SPOTIFY_CLIENT_SECRET,
+            redirect_uri=config.SPOTIFY_REDIRECT_URI,
+            scope=scope,
+            cache_path=".cache-ci",  # separate from local cache
+            open_browser=False,
+        )
+    )
+    return sp
 
 
 def get_spotify_client_from_refresh() -> Spotify:
@@ -87,7 +103,7 @@ def add_tracks_to_playlist(uris):
     log.debug(
         f"[add_tracks_to_playlist] Adding {len(uris)} tracks to playlist ID {config.SPOTIFY_PLAYLIST_ID}"
     )
-    sp = get_spotify_client_from_refresh()
+    sp = get_spotify_client()
     sp.playlist_add_items(config.SPOTIFY_PLAYLIST_ID, uris)
     log.info(
         f"[add_tracks_to_playlist] Added {len(uris)} track(s) to playlist {config.SPOTIFY_PLAYLIST_ID}."
@@ -102,7 +118,7 @@ def trim_playlist_to_limit(limit=200):
             "[trim_playlist_to_limit] Missing SPOTIFY_PLAYLIST_ID environment variable."
         )
         raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
-    sp = get_spotify_client_from_refresh()
+    sp = get_spotify_client()
     current = sp.playlist_items(
         config.SPOTIFY_PLAYLIST_ID,
         fields="items.track.uri,total",
@@ -136,7 +152,7 @@ def create_playlist(
     Create a new Spotify playlist with the given name.
     Returns the playlist ID on success, or None on failure.
     """
-    sp = get_spotify_client_from_refresh()
+    sp = get_spotify_client()
     try:
         user_id = sp.current_user()["id"]
         playlist = sp.user_playlist_create(
@@ -157,7 +173,7 @@ def add_tracks_to_specific_playlist(playlist_id: str, track_uris: list[str]):
     if not playlist_id or not track_uris:
         log.debug("⚠️ No playlist_id or track URIs provided; skipping track addition.")
         return
-    sp = get_spotify_client_from_refresh()
+    sp = get_spotify_client()
     try:
         sp.playlist_add_items(playlist_id, track_uris)
         log.debug(f"🎶 Added {len(track_uris)} tracks to playlist {playlist_id}")
