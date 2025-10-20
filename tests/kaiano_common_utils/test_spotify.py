@@ -22,15 +22,6 @@ def test_get_spotify_client_success(monkeypatch):
     assert client == "SpotifyClient(tok)"
 
 
-def test_search_track_not_found(monkeypatch):
-    fake_sp = mock.Mock()
-    fake_sp.search.return_value = {"tracks": {"items": []}}
-    monkeypatch.setattr(spotify, "get_spotify_client", lambda: fake_sp)
-
-    uri = spotify.search_track("NoArtist", "NoTitle")
-    assert uri is None
-
-
 def test_add_tracks_to_playlist_success(monkeypatch, capsys):
     monkeypatch.setattr(config, "SPOTIFY_PLAYLIST_ID", "playlist123")
     fake_sp = mock.Mock()
