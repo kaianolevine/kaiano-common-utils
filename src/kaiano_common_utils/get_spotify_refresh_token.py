@@ -3,13 +3,15 @@ import os
 from dotenv import load_dotenv
 from spotipy import SpotifyOAuth
 
+import kaiano_common_utils.config as config
+
 # Load credentials from your local .env file
 load_dotenv()
 
 sp_oauth = SpotifyOAuth(
     client_id=os.getenv("SPOTIFY_CLIENT_ID"),
     client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-    redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
+    redirect_uri=config.SPOTIFY_REDIRECT_URI,
     scope="playlist-modify-public playlist-modify-private",
     open_browser=True,  # Set to False if you'd prefer a manual link
 )

@@ -1,14 +1,19 @@
 import datetime
 import logging
-import os
 
-level_name = os.getenv("LOG_LEVEL", "ERROR").upper()
+from kaiano_common_utils import config
+
+level_name = config.LOGGING_LEVEL
+if level_name not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+    level_name = "DEBUG"
 
 logging.basicConfig(
-    level=getattr(logging, level_name, logging.ERROR),
+    level=getattr(logging, level_name, logging.INFO),
     format="%(asctime)s [%(levelname)s] [%(name)s.%(funcName)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+logging.getLogger().info(f"Logger initialized with level: {level_name}")
 
 logger = logging.getLogger("core")
 
