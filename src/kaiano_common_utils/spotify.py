@@ -27,10 +27,10 @@ def get_spotify_client() -> Spotify:
     if _spotify_client is not None:
         return _spotify_client
     if config.SPOTIFY_REFRESH_TOKEN:
-        log.info("🔄 Using refresh-token authentication.")
+        log.debug("🔄 Using refresh-token authentication.")
         _spotify_client = get_spotify_client_from_refresh()
     else:
-        log.info("⚙️ Using OAuth (local interactive) authentication.")
+        log.debug("⚙️ Using OAuth (local interactive) authentication.")
         _spotify_client = spotipy.Spotify(
             auth_manager=SpotifyOAuth(
                 client_id=config.SPOTIFY_CLIENT_ID,
@@ -91,7 +91,7 @@ def get_spotify_client_from_refresh() -> Spotify:
 
 def search_track(artist: str, title: str) -> str | None:
     log.debug(f"[search_track] Called with artist='{artist}', title='{title}'")
-    sp = get_spotify_client()
+    sp = get_spotify_client_from_refresh()
     query = f"artist:{artist} track:{title}"
     log.debug(f"[search_track] Constructed query: {query}")
 
