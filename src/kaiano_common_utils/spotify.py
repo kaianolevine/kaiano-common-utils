@@ -27,10 +27,10 @@ def get_spotify_client() -> Spotify:
     if _spotify_client is not None:
         return _spotify_client
     if config.SPOTIFY_REFRESH_TOKEN:
-        log.debug("🔄 Using refresh-token authentication.")
+        log.info("🔄 Using refresh-token authentication.")
         _spotify_client = get_spotify_client_from_refresh()
     else:
-        log.debug("⚙️ Using OAuth (local interactive) authentication.")
+        log.info("⚙️ Using OAuth (local interactive) authentication.")
         _spotify_client = spotipy.Spotify(
             auth_manager=SpotifyOAuth(
                 client_id=config.SPOTIFY_CLIENT_ID,
@@ -62,12 +62,12 @@ def get_spotify_client_from_refresh() -> Spotify:
     )
 
     if not all([client_id, client_secret, redirect_uri, refresh_token]):
-        log.error(
+        log.critical(
             "[get_spotify_client_from_refresh] Missing one or more required Spotify credentials."
         )
         raise ValueError("Missing one or more required Spotify credentials.")
 
-    log.debug(
+    log.info(
         "✅ [get_spotify_client_from_refresh] All Spotify environment variables found. Initializing client..."
     )
 
@@ -79,10 +79,14 @@ def get_spotify_client_from_refresh() -> Spotify:
         cache_handler=NoopCacheHandler(),
     )
 
-    log.debug("[get_spotify_client_from_refresh] Refreshing Spotify access token...")
-    token_info = auth_manager.refresh_access_token(refresh_token)
-    log.info("[get_spotify_client_from_refresh] Obtained new Spotify access token.")
-    return Spotify(auth=token_info["access_token"])
+    try:
+        log.info("[get_spotify_client_from_refresh] Refreshing Spotify access token...")
+        token_info = auth_manager.refresh_access_token(refresh_token)
+        log.info("[get_spotify_client_from_refresh] Obtained new Spotify access token.")
+        return Spotify(auth=token_info["access_token"])
+    except Exception as e:
+        log.error(f"[get_spotify_client_from_refresh] Failed to refresh token: {e}")
+        raise
 
 
 def search_track(artist: str, title: str) -> str | None:
@@ -122,8 +126,13 @@ def search_track(artist: str, title: str) -> str | None:
                 time.sleep(retry_after)
                 continue
             elif e.http_status == 403:
-                log.error(
+                log.warning(
                     "[search_track] Forbidden error (403) from Spotify API. Check permissions."
+                )
+                return None
+            elif e.http_status >= 500:
+                log.error(
+                    f"[search_track] Server error {e.http_status} from Spotify API: {e}"
                 )
                 return None
             else:
@@ -136,12 +145,12 @@ def search_track(artist: str, title: str) -> str | None:
 def add_tracks_to_playlist(uris: list[str]) -> None:
     log.debug(f"[add_tracks_to_playlist] Called with uris={uris}")
     if not config.SPOTIFY_PLAYLIST_ID:
-        log.error(
+        log.critical(
             "[add_tracks_to_playlist] Missing SPOTIFY_PLAYLIST_ID environment variable."
         )
         raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
     if not uris:
-        log.info("[add_tracks_to_playlist] No tracks to add.")
+        log.warning("[add_tracks_to_playlist] No tracks to add.")
         print("No tracks to add.")
         return
 
@@ -152,7 +161,7 @@ def add_tracks_to_playlist(uris: list[str]) -> None:
             f"[add_tracks_to_playlist] Removed {duplicates_removed} duplicate track(s)."
         )
 
-    log.debug(
+    log.info(
         f"[add_tracks_to_playlist] Adding {len(unique_uris)} tracks to playlist ID {config.SPOTIFY_PLAYLIST_ID}"
     )
     sp = get_spotify_client()
@@ -166,7 +175,7 @@ def add_tracks_to_playlist(uris: list[str]) -> None:
 def trim_playlist_to_limit(limit: int = 200) -> None:
     log.debug(f"[trim_playlist_to_limit] Called with limit={limit}")
     if not config.SPOTIFY_PLAYLIST_ID:
-        log.error(
+        log.critical(
             "[trim_playlist_to_limit] Missing SPOTIFY_PLAYLIST_ID environment variable."
         )
         raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
@@ -177,7 +186,7 @@ def trim_playlist_to_limit(limit: int = 200) -> None:
         additional_types=["track"],
     )
     total = current["total"]
-    log.debug(f"[trim_playlist_to_limit] Playlist size: {total}, limit: {limit}")
+    log.info(f"[trim_playlist_to_limit] Playlist size: {total}, limit: {limit}")
     if total <= limit:
         log.info(
             f"[trim_playlist_to_limit] Playlist is within limit ({total}/{limit}); no tracks removed."
@@ -211,10 +220,10 @@ def create_playlist(
             user=user_id, name=name, public=False, description=description
         )
         playlist_id = playlist["id"]
-        log.debug(f"✅ Created Spotify playlist '{name}' (ID: {playlist_id})")
+        log.info(f"✅ Created Spotify playlist '{name}' (ID: {playlist_id})")
         return playlist_id
     except Exception as e:
-        log.debug(f"❌ Failed to create playlist '{name}': {e}")
+        log.error(f"❌ Failed to create playlist '{name}': {e}")
         return None
 
 
@@ -232,10 +241,13 @@ def add_tracks_to_specific_playlist(playlist_id: str, track_uris: list[str]) -> 
         log.info(
             f"[add_tracks_to_specific_playlist] Removed {duplicates_removed} duplicate track(s)."
         )
+    log.debug(
+        f"[add_tracks_to_specific_playlist] Adding {len(unique_uris)} tracks to playlist {playlist_id}"
+    )
 
     sp = get_spotify_client()
     try:
         sp.playlist_add_items(playlist_id, unique_uris)
-        log.debug(f"🎶 Added {len(unique_uris)} tracks to playlist {playlist_id}")
+        log.info(f"🎶 Added {len(unique_uris)} tracks to playlist {playlist_id}")
     except Exception as e:
-        log.debug(f"❌ Failed to add tracks to playlist {playlist_id}: {e}")
+        log.error(f"❌ Failed to add tracks to playlist {playlist_id}: {e}")
