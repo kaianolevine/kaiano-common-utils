@@ -32,7 +32,9 @@ def get_logger():
         logging.getLogger().warning(
             f"Invalid logging level: {level_to_set}. Level not changed."
         )
-        logging.getLogger().warning(f"config.LOGGING_LEVEL: {config.LOGGING_LEVEL}.")
+        logging.getLogger().warning(
+            f"config.LOGGING_LEVEL: {config.LOGGING_LEVEL}," " or DEBUG"
+        )
         logging.getLogger().warning(f"default_level: {default_level}.")
     return logger
 
