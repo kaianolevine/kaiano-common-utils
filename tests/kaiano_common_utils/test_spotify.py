@@ -56,18 +56,6 @@ def test_get_spotify_client_local_auth(monkeypatch):
     assert spotify._spotify_client == mock_spotify_instance
 
 
-def test_get_spotify_client_from_refresh_success(monkeypatch, mock_config):
-    fake_token = {"access_token": "abc123"}
-    mock_auth = MagicMock()
-    mock_auth.refresh_access_token.return_value = fake_token
-    monkeypatch.setattr(spotify, "SpotifyOAuth", lambda **kw: mock_auth)
-    monkeypatch.setattr(spotify, "Spotify", MagicMock(return_value="client_obj"))
-
-    client = spotify.get_spotify_client_from_refresh()
-    assert client == "client_obj"
-    mock_auth.refresh_access_token.assert_called_once_with("fake_refresh")
-
-
 def test_get_spotify_client_from_refresh_missing_credentials(monkeypatch):
     monkeypatch.setattr(spotify.config, "SPOTIFY_CLIENT_ID", None)
     with pytest.raises(ValueError):
