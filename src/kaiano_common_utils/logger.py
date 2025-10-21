@@ -38,17 +38,3 @@ def get_logger():
 
 def format_date(dt: datetime.datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M")
-
-
-def set_logging_level(level: str):
-    normalized_level = level.upper()
-    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    if normalized_level not in valid_levels:
-        logging.getLogger().warning(
-            f"Invalid logging level: {level}. Level not changed."
-        )
-        return
-    new_level = getattr(logging, normalized_level)
-    logging.getLogger().setLevel(new_level)
-    logger.setLevel(new_level)
-    logging.getLogger().info(f"Logging level changed to: {normalized_level}")
