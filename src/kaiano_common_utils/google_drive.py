@@ -34,19 +34,25 @@ def list_files_in_folder(
     """
     List files in a Google Drive folder, optionally filtering by MIME type.
     Supports both standard Drive and Shared Drive contexts.
+    :param service: Google Drive API service instance.
+    :param folder_id: The ID of the folder to list files from.
+    :param mime_type_filter: Optional. If set, restricts results to this MIME type.
+    :param include_all_drives: If True (default), includes files from all drives (Shared Drives support).
+    :param include_folders: If False (default), excludes folders from results.
+    :return: List of file dictionaries.
     """
     log.debug(
-        f"list_files_in_folder called with folder_id={folder_id}, mime_type_filter={mime_type_filter}, include_all_drives={include_all_drives}, include_folders={include_folders}"
+        f"list_files_in_folder called with folder_id={folder_id}, "
+        f"mime_type_filter={mime_type_filter}, include_all_drives={include_all_drives}, include_folders={include_folders}"
     )
     query = f"'{folder_id}' in parents"
     if not include_folders:
         query += " and mimeType != 'application/vnd.google-apps.folder'"
     if mime_type_filter:
         query += f" and mimeType = '{mime_type_filter}'"
-        log.info(f"Applying MIME type filter: {mime_type_filter}")
+        log.info(f"Applying mime_type_filter: {mime_type_filter}")
     query += " and trashed = false"
     log.debug(f"Drive query: {query}")
-
     files = []
     page_token = None
     while True:
@@ -61,31 +67,30 @@ def list_files_in_folder(
                 params["supportsAllDrives"] = True
                 params["includeItemsFromAllDrives"] = True
                 params["spaces"] = "drive"
-
             result = service.files().list(**params).execute()
             batch = result.get("files", [])
             files.extend(batch)
             page_token = result.get("nextPageToken", None)
             log.debug(
-                f"Fetched {len(batch)} files (total: {len(files)}) from folder {folder_id}"
+                f"Fetched {len(batch)} files (cumulative total: {len(files)}) from folder {folder_id}"
             )
             if page_token is None:
                 break
         except Exception as e:
-            log.error(f"❌ Error listing files in folder {folder_id}: {e}")
+            log.error(f"Error listing files in folder {folder_id}: {e}")
             break
-
-    if not files:
-        log.warning(f"No files found in folder {folder_id}.")
+    log.info(f"Found {len(files)} files in folder {folder_id}.")
+    if files:
+        file_details = ", ".join(
+            [f"{item.get('id', '?')}:{item.get('name', '?')}" for item in files]
+        )
+        log.debug(f"Files found: {file_details}")
     else:
-        log.info(f"📂 Found {len(files)} files in folder {folder_id}.")
-        log.debug(", ".join([f"{f.get('id')}:{f.get('name')}" for f in files]))
-
+        log.debug("No files found in folder.")
     return files
 
 
 def list_music_files(service, folder_id):
-    log.debug(f"Listing audio files in folder {folder_id}")
     query = f"'{folder_id}' in parents and mimeType contains 'audio'"
     results = (
         service.files()
@@ -98,12 +103,7 @@ def list_music_files(service, folder_id):
         )
         .execute()
     )
-    files = results.get("files", [])
-    if not files:
-        log.warning(f"No audio files found in folder {folder_id}")
-    else:
-        log.info(f"🎵 Found {len(files)} audio files in folder {folder_id}")
-    return files
+    return results.get("files", [])
 
 
 def get_or_create_folder(parent_folder_id: str, name: str, drive_service) -> str:
@@ -111,54 +111,105 @@ def get_or_create_folder(parent_folder_id: str, name: str, drive_service) -> str
     Creates it if it doesn't exist, using an in-memory cache to avoid duplication."""
     cache_key = f"{parent_folder_id}/{name}"
     if cache_key in FOLDER_CACHE:
-        log.debug(f"Cache hit for folder {name} under {parent_folder_id}")
         return FOLDER_CACHE[cache_key]
 
-    try:
-        query = (
-            f"'{parent_folder_id}' in parents and "
-            f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    # Search for existing folder
+    query = (
+        f"'{parent_folder_id}' in parents and "
+        f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    )
+    response = (
+        drive_service.files()
+        .list(
+            q=query,
+            spaces="drive",
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
-        response = (
+        .execute()
+    )
+    folders = response.get("files", [])
+    if folders:
+        print(f"📁 Found existing folder '{name}' under parent {parent_folder_id}")
+        folder_id = folders[0]["id"]
+    else:
+        print(f"📁 Creating new folder '{name}' under parent {parent_folder_id}")
+        folder_metadata = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_folder_id],
+        }
+        folder = (
             drive_service.files()
-            .list(
-                q=query,
-                spaces="drive",
-                fields="files(id, name)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
+            .create(body=folder_metadata, fields="id", supportsAllDrives=True)
             .execute()
         )
-        folders = response.get("files", [])
-        if folders:
-            log.info(
-                f"📁 Found existing folder '{name}' under parent {parent_folder_id}"
-            )
-            folder_id = folders[0]["id"]
-        else:
-            log.info(f"📁 Creating new folder '{name}' under parent {parent_folder_id}")
-            folder_metadata = {
-                "name": name,
-                "mimeType": "application/vnd.google-apps.folder",
-                "parents": [parent_folder_id],
-            }
-            folder = (
-                drive_service.files()
-                .create(body=folder_metadata, fields="id", supportsAllDrives=True)
-                .execute()
-            )
-            folder_id = folder["id"]
-        FOLDER_CACHE[cache_key] = folder_id
-        return folder_id
-    except HttpError as e:
-        log.error(f"❌ Drive API error creating/finding folder '{name}': {e}")
-        raise
+        folder_id = folder["id"]
+
+    FOLDER_CACHE[cache_key] = folder_id
+    return folder_id
+
+
+def get_or_create_subfolder(drive_service, parent_folder_id, subfolder_name):
+    """
+    Gets or creates a subfolder inside a shared drive or My Drive.
+    Returns the folder ID.
+    """
+    query = (
+        f"mimeType='application/vnd.google-apps.folder' and "
+        f"name='{subfolder_name}' and "
+        f"'{parent_folder_id}' in parents and trashed=false"
+    )
+    response = (
+        drive_service.files()
+        .list(
+            q=query,
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+    )
+
+    files = response.get("files", [])
+    if files:
+        return files[0]["id"]
+
+    file_metadata = {
+        "name": subfolder_name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_folder_id],
+    }
+    folder = (
+        drive_service.files()
+        .create(body=file_metadata, fields="id", supportsAllDrives=True)
+        .execute()
+    )
+
+    return folder.get("id")
+
+
+def get_file_by_name(drive_service, folder_id, filename):
+    """
+    Returns the file metadata for a file with a given name in a folder, or None if not found.
+    """
+    query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+    response = drive_service.files().list(q=query, fields="files(id, name)").execute()
+    files = response.get("files", [])
+    if files:
+        return files[0]
+    return None
 
 
 def get_all_subfolders(drive_service, parent_folder_id: str) -> List[Dict]:
-    """Returns all subfolders in a given parent folder."""
-    log.info(f"📂 Retrieving subfolders in folder {parent_folder_id}")
+    """
+    Returns a list of all subfolders in the specified parent folder.
+    Supports Shared Drives.
+    """
+    log.info(
+        f"📂 Retrieving all subfolders in folder ID {parent_folder_id} (shared drives enabled)"
+    )
     try:
         query = f"'{parent_folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         folders = []
@@ -176,77 +227,115 @@ def get_all_subfolders(drive_service, parent_folder_id: str) -> List[Dict]:
                 )
                 .execute()
             )
-            batch = response.get("files", [])
-            folders.extend(batch)
+            folders.extend(response.get("files", []))
             page_token = response.get("nextPageToken", None)
             if page_token is None:
                 break
-        if folders:
-            log.info(f"📁 Found {len(folders)} subfolders under {parent_folder_id}")
-        else:
-            log.warning(f"No subfolders found under {parent_folder_id}")
+        log.info(f"📂 Found {len(folders)} subfolders under {parent_folder_id}")
         return folders
-    except HttpError as e:
-        log.error(f"❌ Error retrieving subfolders: {e}")
+    except HttpError as error:
+        log.error(f"An error occurred while retrieving subfolders: {error}")
         raise
+
+
+def get_files_in_folder(
+    service, folder_id, name_contains=None, mime_type=None, trashed=False
+):
+    """Returns a list of files in a Google Drive folder, optionally filtering by name substring and MIME type."""
+    query = f"'{folder_id}' in parents"
+    if name_contains:
+        query += f" and name contains '{name_contains}'"
+    if mime_type:
+        query += f" and mimeType = '{mime_type}'"
+    if trashed is False:
+        query += " and trashed = false"
+
+    results = (
+        service.files()
+        .list(
+            q=query,
+            spaces="drive",
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+    )
+
+    return results.get("files", [])
 
 
 def download_file(service, file_id, destination_path):
     """Download a file from Google Drive by ID using the Drive API."""
-    log.info(f"⬇️ Starting download for file {file_id} → {destination_path}")
+    log.debug(
+        f"download_file called with file_id={file_id}, destination_path={destination_path}"
+    )
+    log.info(f"Starting download for file_id={file_id} to {destination_path}")
+
+    log.debug("Preparing request for file download")
+    # Prepare request for file download
+    request = service.files().get_media(fileId=file_id)
+
+    # Attempt to open the destination file for writing
     try:
         fh = io.FileIO(destination_path, "wb")
-        log.debug(f"Opened file handle for {destination_path}")
+        log.debug(f"Destination file {destination_path} opened for writing")
     except Exception as e:
-        log.error(f"❌ Failed to open destination file: {e}")
-        raise
+        log.exception(f"Failed to open destination file {destination_path}")
+        raise IOError(f"Could not create or write to file: {destination_path}") from e
 
-    request = service.files().get_media(fileId=file_id)
+    # Download file in chunks
     downloader = MediaIoBaseDownload(fh, request)
     done = False
     chunk_count = 0
+    log.info("Beginning chunked download")
     while not done:
         status, done = downloader.next_chunk()
         chunk_count += 1
         progress_percent = int(status.progress() * 100) if status else 0
-        log.info(f"⬇️ Download progress: {progress_percent}%")
-    log.info(f"✅ Download complete for file {file_id}")
+        log.debug(f"Chunk {chunk_count}: Download progress {progress_percent}%")
+        print(f"⬇️  Download {progress_percent}%.")
+    log.info(f"Download complete for file_id={file_id} to {destination_path}")
     log.debug(f"Total chunks downloaded: {chunk_count}")
 
 
-def upload_to_drive(drive, filepath, parent_id):
-    """Uploads a CSV as a Google Sheet to a specified Drive folder."""
-    log.info(f"📤 Uploading '{filepath}' to Drive folder '{parent_id}'")
-    try:
-        file_metadata = {
-            "name": os.path.basename(filepath),
-            "parents": [parent_id],
-            "mimeType": "application/vnd.google-apps.spreadsheet",
-        }
-        media = MediaFileUpload(filepath, mimetype="text/csv")
-        uploaded = (
-            drive.files()
-            .create(
-                body=file_metadata,
-                media_body=media,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-        log.info(f"📄 Uploaded to Drive as Google Sheet: {filepath}")
-        log.debug(f"Uploaded file ID: {uploaded['id']}")
+def upload_file(service, filepath, folder_id):
+    log.debug(f"Filepath: {filepath}, Folder ID: {folder_id}")
+    file_metadata = {"name": os.path.basename(filepath), "parents": [folder_id]}
+    media = MediaFileUpload(filepath, resumable=True)
+    service.files().create(
+        body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
+    ).execute()
 
-        gc = google_sheets.get_gspread_client()
-        spreadsheet = gc.open_by_key(uploaded["id"])
-        for sheet in spreadsheet.worksheets():
-            first_row = sheet.row_values(1)
-            if first_row and first_row[0].strip().lower().startswith("sep="):
-                sheet.delete_rows(1)
-        return uploaded["id"]
-    except Exception as e:
-        log.error(f"❌ Upload failed for '{filepath}': {e}")
-        raise
+
+def upload_to_drive(drive, filepath, parent_id):
+    log.debug(f"Uploading file '{filepath}' to Drive folder ID '{parent_id}'")
+    file_metadata = {
+        "name": os.path.basename(filepath),
+        "parents": [parent_id],
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+    }
+    media = MediaFileUpload(filepath, mimetype="text/csv")
+    uploaded = (
+        drive.files()
+        .create(
+            body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
+        )
+        .execute()
+    )
+    log.info(f"📄 Uploaded to Drive as Google Sheet: {filepath}")
+    log.debug(f"Uploaded file ID: {uploaded['id']}")
+
+    # TODO - move this to a sheets function
+    # After uploading, use gspread to open the sheet and check for 'sep=' in first row of all worksheets
+    gc = google_sheets.get_gspread_client()
+    spreadsheet = gc.open_by_key(uploaded["id"])
+    for sheet in spreadsheet.worksheets():
+        first_row = sheet.row_values(1)
+        if first_row and first_row[0].strip().lower().startswith("sep="):
+            sheet.delete_rows(1)
+
+    return uploaded["id"]
 
 
 def create_spreadsheet(
@@ -255,8 +344,14 @@ def create_spreadsheet(
     parent_folder_id,
     mime_type: str = "application/vnd.google-apps.spreadsheet",
 ):
-    """Finds or creates a spreadsheet by name."""
-    log.info(f"🔍 Searching for file '{name}' in folder {parent_folder_id}")
+    """
+    Finds a file by name in the specified folder. If not found, creates a new file with that name.
+    This function supports Shared Drives (supportsAllDrives=True).
+    Returns the file ID.
+    """
+    log.info(
+        f"🔍 Searching for file '{name}' in folder ID {parent_folder_id} (shared drives enabled)"
+    )
     try:
         query = f"'{parent_folder_id}' in parents and name = '{name}' and mimeType = '{mime_type}' and trashed = false"
         response = (
@@ -264,7 +359,7 @@ def create_spreadsheet(
             .list(
                 q=query,
                 spaces="drive",
-                fields="files(id, name)",
+                fields="nextPageToken, files(id, name)",
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
@@ -272,23 +367,26 @@ def create_spreadsheet(
         )
         files = response.get("files", [])
         if files:
-            log.info(f"📄 Found existing file '{name}' (ID: {files[0]['id']})")
+            log.info(f"📄 Found existing file '{name}' with ID {files[0]['id']}")
             return files[0]["id"]
-        log.info(f"➕ No existing file found, creating new: '{name}'")
-        file_metadata = {
-            "name": name,
-            "mimeType": mime_type,
-            "parents": [parent_folder_id],
-        }
-        new_file = (
-            drive_service.files()
-            .create(body=file_metadata, fields="id", supportsAllDrives=True)
-            .execute()
-        )
-        log.info(f"🆕 Created new file '{name}' (ID: {new_file['id']})")
-        return new_file["id"]
-    except HttpError as e:
-        log.error(f"❌ Error finding/creating spreadsheet '{name}': {e}")
+        else:
+            log.info(
+                f"➕ No existing file named '{name}' — creating new one in parent {parent_folder_id}"
+            )
+            file_metadata = {
+                "name": name,
+                "mimeType": mime_type,
+                "parents": [parent_folder_id],
+            }
+            file = (
+                drive_service.files()
+                .create(body=file_metadata, fields="id", supportsAllDrives=True)
+                .execute()
+            )
+            log.info(f"🆕 Created new file '{name}' with ID {file['id']}")
+            return file["id"]
+    except HttpError as error:
+        log.error(f"An error occurred while finding or creating file: {error}")
         raise
 
 
@@ -296,43 +394,28 @@ def move_file_to_folder(drive_service, file_id, folder_id):
     """
     Moves a file to a specified folder.
     """
-    try:
-        # Get current parents
-        file = drive_service.files().get(fileId=file_id, fields="parents").execute()
-        previous_parents = ",".join(file.get("parents", []))
-        log.debug(f"Previous parents for file {file_id}: {previous_parents}")
-        # Move the file to the new folder
-        drive_service.files().update(
-            fileId=file_id,
-            addParents=folder_id,
-            removeParents=previous_parents,
-            fields="id, parents",
-        ).execute()
-        log.info(f"Moved file {file_id} to folder {folder_id}")
-    except Exception as e:
-        log.error(f"❌ Error moving file {file_id} to folder {folder_id}: {e}")
-        raise
+    # Get current parents
+    file = drive_service.files().get(fileId=file_id, fields="parents").execute()
+    previous_parents = ",".join(file.get("parents", []))
+    # Move the file to the new folder
+    drive_service.files().update(
+        fileId=file_id,
+        addParents=folder_id,
+        removeParents=previous_parents,
+        fields="id, parents",
+    ).execute()
 
 
 def remove_file_from_root(drive_service, file_id):
     """
     Removes a file from the root folder.
     """
-    try:
-        file = drive_service.files().get(fileId=file_id, fields="parents").execute()
-        parents = file.get("parents", [])
-        if "root" in parents:
-            drive_service.files().update(
-                fileId=file_id, removeParents="root", fields="id, parents"
-            ).execute()
-            log.info(f"Removed file {file_id} from root folder")
-        else:
-            log.warning(
-                f"File {file_id} is not in the root folder, cannot remove from root"
-            )
-    except Exception as e:
-        log.error(f"❌ Error removing file {file_id} from root: {e}")
-        raise
+    file = drive_service.files().get(fileId=file_id, fields="parents").execute()
+    parents = file.get("parents", [])
+    if "root" in parents:
+        drive_service.files().update(
+            fileId=file_id, removeParents="root", fields="id, parents"
+        ).execute()
 
 
 def find_or_create_file_by_name(
@@ -401,9 +484,6 @@ def find_subfolder_id(
     Returns:
         str | None: The ID of the subfolder if found, otherwise None.
     """
-    log.debug(
-        f"Searching for subfolder '{subfolder_name}' under parent '{parent_folder_id}'"
-    )
     try:
         query = (
             f"'{parent_folder_id}' in parents and "
@@ -424,16 +504,7 @@ def find_subfolder_id(
         )
         files = response.get("files", [])
         if files:
-            log.info(
-                f"Found subfolder '{subfolder_name}' with ID {files[0]['id']} under parent '{parent_folder_id}'"
-            )
             return files[0]["id"]
-        else:
-            log.warning(
-                f"No subfolder named '{subfolder_name}' found under parent '{parent_folder_id}'"
-            )
     except Exception as e:
-        log.error(
-            f"❌ Error finding subfolder '{subfolder_name}' under parent '{parent_folder_id}': {e}"
-        )
+        log.error(f"❌ Error finding subfolder '{subfolder_name}': {e}")
     return None
