@@ -91,7 +91,7 @@ def get_spotify_client_from_refresh() -> Spotify:
 
 def search_track(artist: str, title: str) -> str | None:
     log.debug(f"[search_track] Called with artist='{artist}', title='{title}'")
-    sp = get_spotify_client_from_refresh()
+    sp = get_spotify_client()
     query = f"artist:{artist} track:{title}"
     log.debug(f"[search_track] Constructed query: {query}")
 
