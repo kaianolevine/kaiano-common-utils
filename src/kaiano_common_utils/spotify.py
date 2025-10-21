@@ -33,9 +33,9 @@ def get_spotify_client() -> Spotify:
         log.debug("⚙️ Using OAuth (local interactive) authentication.")
         _spotify_client = spotipy.Spotify(
             auth_manager=SpotifyOAuth(
-                client_id=config.SPOTIFY_CLIENT_ID,
-                client_secret=config.SPOTIFY_CLIENT_SECRET,
-                redirect_uri=config.SPOTIFY_REDIRECT_URI,
+                client_id=config.SPOTIPY_CLIENT_ID,
+                client_secret=config.SPOTIPY_CLIENT_SECRET,
+                redirect_uri=config.SPOTIPY_REDIRECT_URI,
                 scope="playlist-modify-public playlist-modify-private",
                 cache_path=".cache-ci",
                 open_browser=False,
@@ -48,10 +48,10 @@ def get_spotify_client_from_refresh() -> Spotify:
     log.debug("🔐 [get_spotify_client_from_refresh] Called with no parameters.")
     log.debug("🔐 Loading Spotify credentials from environment variables...")
 
-    client_id = config.SPOTIFY_CLIENT_ID
-    client_secret = config.SPOTIFY_CLIENT_SECRET
-    redirect_uri = config.SPOTIFY_REDIRECT_URI
-    refresh_token = config.SPOTIFY_REFRESH_TOKEN
+    client_id = config.SPOTIPY_CLIENT_ID
+    client_secret = config.SPOTIPY_CLIENT_SECRET
+    redirect_uri = config.SPOTIPY_REDIRECT_URI
+    refresh_token = config.SPOTIPY_REFRESH_TOKEN
 
     log.debug(
         f"[get_spotify_client_from_refresh] Loaded env vars: "
@@ -91,7 +91,7 @@ def get_spotify_client_from_refresh() -> Spotify:
 
 def search_track(artist: str, title: str) -> str | None:
     log.debug(f"[search_track] Called with artist='{artist}', title='{title}'")
-    sp = get_spotify_client_from_refresh()
+    sp = get_spotify_client()
     query = f"artist:{artist} track:{title}"
     log.debug(f"[search_track] Constructed query: {query}")
 
