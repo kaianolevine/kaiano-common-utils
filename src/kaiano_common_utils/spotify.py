@@ -235,13 +235,13 @@ def add_tracks_to_specific_playlist(playlist_id: str, track_uris: list[str]) -> 
 
 
 def find_playlist_by_name(name: str):
-    """Return (playlist_id, playlist_data) if a playlist exists with the given name."""
+    """Return a dict with playlist ID and metadata if a playlist exists with the given name."""
     sp = get_spotify_client_from_refresh()
     results = sp.current_user_playlists(limit=50)
     for playlist in results["items"]:
         if playlist["name"] == name:
-            return playlist["id"], playlist
-    return None, None
+            return {"id": playlist["id"], "data": playlist}
+    return None
 
 
 def get_playlist_tracks(playlist_id: str) -> list[str]:
