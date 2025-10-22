@@ -1,6 +1,10 @@
 [tool.poetry]
 name = "kaiano-common-utils"
+<<<<<<< HEAD
 version = "0.0.34"
+=======
+version = "0.0.36"
+>>>>>>> d95b44acf19f877bf65c265d6036f467ddc9f9a8
 description = "Common utility functions shared across Kaiano’s projects."
 authors = ["Kaiano Levine <kaiano@example.com>"]
 license = "MIT"
