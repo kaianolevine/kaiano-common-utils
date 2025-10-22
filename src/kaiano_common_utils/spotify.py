@@ -146,20 +146,50 @@ def add_tracks_to_playlist(uris: list[str]) -> None:
         print("No tracks to add.")
         return
 
+    # Remove duplicates in the provided list, preserving order
     unique_uris = list(dict.fromkeys(uris))
     duplicates_removed = len(uris) - len(unique_uris)
     if duplicates_removed > 0:
-        log.info(f"Removed {duplicates_removed} duplicate track(s).")
+        log.info(f"Removed {duplicates_removed} duplicate track(s) from input list.")
 
-    log.info(
-        f"Adding {len(unique_uris)} tracks to playlist ID {config.SPOTIFY_PLAYLIST_ID}"
-    )
     sp = get_spotify_client()
-    sp.playlist_add_items(config.SPOTIFY_PLAYLIST_ID, unique_uris)
-    log.info(
-        f"Added {len(unique_uris)} track(s) to playlist {config.SPOTIFY_PLAYLIST_ID}."
-    )
-    print(f"✅ Added {len(unique_uris)} track(s) to playlist.")
+
+    # Fetch all current track URIs from the playlist, paginated
+    playlist_id = config.SPOTIFY_PLAYLIST_ID
+    existing_uris = set()
+    offset = 0
+    while True:
+        resp = sp.playlist_items(
+            playlist_id,
+            fields="items.track.uri,total,next",
+            additional_types=["track"],
+            limit=100,
+            offset=offset,
+        )
+        items = resp.get("items", [])
+        for item in items:
+            track = item.get("track")
+            if track and "uri" in track:
+                existing_uris.add(track["uri"])
+        if not resp.get("next"):
+            break
+        offset += 100
+
+    # Filter out URIs that are already in the playlist
+    uris_to_add = [uri for uri in unique_uris if uri not in existing_uris]
+    skipped = len(unique_uris) - len(uris_to_add)
+    if skipped > 0:
+        log.info(f"Skipped {skipped} track(s) already present in the playlist.")
+
+    if not uris_to_add:
+        log.info("No new tracks to add after filtering existing tracks.")
+        print("No new tracks to add; all provided tracks are already in the playlist.")
+        return
+
+    log.info(f"Adding {len(uris_to_add)} tracks to playlist ID {playlist_id}")
+    sp.playlist_add_items(playlist_id, uris_to_add)
+    log.info(f"Added {len(uris_to_add)} track(s) to playlist {playlist_id}.")
+    print(f"✅ Added {len(uris_to_add)} track(s) to playlist.")
 
 
 def trim_playlist_to_limit(limit: int = 200) -> None:

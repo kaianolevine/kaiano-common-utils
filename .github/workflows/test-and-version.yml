@@ -1,11 +1,17 @@
-name: Auto Version Bump
-
-on:
-  push:
-    branches:
-      - main
+name: Test and Coverage, then Auto Version Bump
+on: [push, pull_request]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install Poetry
+        run: pip install poetry
+      
   bump:
     runs-on: ubuntu-latest
     steps:
@@ -18,6 +24,12 @@ jobs:
           python-version: "3.13"
       - name: Install Poetry
         run: pip install poetry
+      - name: Install dependencies
+        run: poetry install
+      - name: Run pre-commit checks
+        run: poetry run pre-commit run --all-files
+      - name: Run tests
+        run: poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing
       - name: Auto Increment Patch
         run: |
           CURRENT_VERSION=$(poetry version -s)
