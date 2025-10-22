@@ -242,3 +242,49 @@ def find_playlist_by_name(name: str):
         if playlist["name"] == name:
             return playlist["id"], playlist
     return None, None
+
+
+def get_playlist_tracks(playlist_id: str) -> list[str]:
+    """
+    Retrieve all track URIs from a specific Spotify playlist.
+    Returns a list of track URIs.
+    """
+    log.debug(f"[get_playlist_tracks] Fetching tracks for playlist_id={playlist_id}")
+    if not playlist_id:
+        log.warning(
+            "[get_playlist_tracks] No playlist_id provided; returning empty list."
+        )
+        return []
+
+    sp = get_spotify_client()
+    tracks = []
+    offset = 0
+
+    try:
+        while True:
+            response = sp.playlist_items(
+                playlist_id,
+                fields="items.track.uri,total,next",
+                additional_types=["track"],
+                limit=100,
+                offset=offset,
+            )
+            items = response.get("items", [])
+            uris = [item["track"]["uri"] for item in items if item.get("track")]
+            tracks.extend(uris)
+            log.debug(
+                f"[get_playlist_tracks] Retrieved {len(uris)} tracks (offset={offset})"
+            )
+
+            if not response.get("next"):
+                break
+            offset += 100
+
+        log.info(f"[get_playlist_tracks] Total tracks retrieved: {len(tracks)}")
+        return tracks
+
+    except Exception as e:
+        log.error(
+            f"[get_playlist_tracks] ❌ Failed to retrieve playlist tracks for {playlist_id}: {e}"
+        )
+        return []
