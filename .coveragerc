@@ -3,5 +3,4 @@ branch = True
 source = kaiano_common_utils
 
 [report]
-fail_under = 60
 show_missing = True

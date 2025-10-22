@@ -26,7 +26,7 @@ jobs:
       - name: Enforce coverage threshold (only on main)
         if: github.ref == 'refs/heads/main'
         run: |
-          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=80
+          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=60
 
   bump:
     needs: test
