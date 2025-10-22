@@ -191,7 +191,8 @@ def trim_playlist_to_limit(limit: int = 200) -> None:
 
 
 def create_playlist(
-    name: str, description: str = "Generated automatically by Westie Radio"
+    name: str,
+    description: str = "Generated automatically by Deejay Marvel Automation Tools",
 ) -> str | None:
     """
     Create a new Spotify playlist with the given name.
