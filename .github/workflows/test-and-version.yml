@@ -1,5 +1,12 @@
 name: Test and Coverage, then Auto Version Bump
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]       # Only run version bump when merging/pushing to main
+  pull_request:              # Still run tests on PRs, but no version bump
+    branches: [ main ]
+
+permissions:
+  contents: write            # Required for git push + tag
 
 jobs:
   test:
@@ -11,15 +18,22 @@ jobs:
           python-version: "3.13"
       - name: Install Poetry
         run: pip install poetry
-      
+      - name: Install dependencies
+        run: poetry install
+      - name: Run tests
+        run: poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing
+
   bump:
+    # ✅ Only run after tests, and only when push is on main
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
+          fetch-depth: 0     # Needed for version tags
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: Install Poetry
@@ -28,7 +42,7 @@ jobs:
         run: poetry install
       - name: Run pre-commit checks
         run: poetry run pre-commit run --all-files
-      - name: Run tests
+      - name: Run tests again for safety
         run: poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing
       - name: Auto Increment Patch
         run: |
@@ -40,4 +54,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -am "🔖 Bump version to $NEW_VERSION"
           git tag -a "v$NEW_VERSION" -m "Release $NEW_VERSION"
-          git push --follow-tags
+          git push origin HEAD
+          git push origin "v$NEW_VERSION"
