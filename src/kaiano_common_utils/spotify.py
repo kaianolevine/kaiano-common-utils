@@ -232,3 +232,13 @@ def add_tracks_to_specific_playlist(playlist_id: str, track_uris: list[str]) -> 
         log.info(f"🎶 Added {len(unique_uris)} tracks to playlist {playlist_id}")
     except Exception as e:
         log.error(f"❌ Failed to add tracks to playlist {playlist_id}: {e}")
+
+
+def find_playlist_by_name(name: str):
+    """Return (playlist_id, playlist_data) if a playlist exists with the given name."""
+    sp = get_spotify_client_from_refresh()
+    results = sp.current_user_playlists(limit=50)
+    for playlist in results["items"]:
+        if playlist["name"] == name:
+            return playlist["id"], playlist
+    return None, None
