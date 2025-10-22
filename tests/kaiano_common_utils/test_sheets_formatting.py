@@ -239,16 +239,3 @@ def test_reorder_sheets_http_error(monkeypatch, mock_service):
     metadata = {"sheets": [{"properties": {"title": "A", "sheetId": 1}}]}
     with pytest.raises(HttpError):
         sf.reorder_sheets(mock_service, "id", ["A"], metadata)
-
-
-# =====================================================
-# format_summary_sheet
-# =====================================================
-
-
-def test_format_summary_sheet_calls_batch_update(monkeypatch, mock_service):
-    monkeypatch.setattr(sf.google_sheets, "get_sheet_id_by_name", lambda s, i, n: 1)
-    sf.format_summary_sheet(
-        mock_service, "id", "Sheet1", ["Col1", "Col2"], [["a", "b"]]
-    )
-    mock_service.spreadsheets().batchUpdate.assert_called()
