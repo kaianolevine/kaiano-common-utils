@@ -202,7 +202,7 @@ def create_playlist(
     try:
         user_id = sp.current_user()["id"]
         playlist = sp.user_playlist_create(
-            user=user_id, name=name, public=False, description=description
+            user=user_id, name=name, public=True, description=description
         )
         playlist_id = playlist["id"]
         log.info(f"✅ Created Spotify playlist '{name}' (ID: {playlist_id})")
