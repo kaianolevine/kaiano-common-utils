@@ -236,12 +236,38 @@ def add_tracks_to_specific_playlist(playlist_id: str, track_uris: list[str]) -> 
 
 def find_playlist_by_name(name: str):
     """Return a dict with playlist ID and metadata if a playlist exists with the given name."""
-    sp = get_spotify_client_from_refresh()
-    results = sp.current_user_playlists(limit=50)
-    for playlist in results["items"]:
-        if playlist["name"] == name:
-            return {"id": playlist["id"], "data": playlist}
-    return None
+    log.debug(f"Searching for playlist: {name}")
+
+    try:
+        sp = get_spotify_client_from_refresh()
+        log.debug("Spotify client initialized.")
+        results = sp.current_user_playlists(limit=50)
+
+        total = results.get("total", "unknown")
+        log.debug(
+            f"Retrieved {len(results.get('items', []))} playlists (total={total})"
+        )
+
+        # Log each playlist name to confirm what Spotify returned
+        for playlist in results.get("items", []):
+            log.debug(
+                f"Found playlist: {playlist.get('name')} (ID={playlist.get('id')})"
+            )
+
+            if playlist.get("name") == name:
+                log.info(
+                    f"✅ Match found: {playlist.get('name')} (ID={playlist.get('id')})"
+                )
+                return {"id": playlist["id"], "data": playlist}
+
+        log.warning(f"⚠️ No playlist found with name '{name}'")
+        return None
+
+    except Exception as e:
+        log.error(
+            f"❌ Exception while searching for playlist '{name}': {e}", exc_info=True
+        )
+        return None
 
 
 def get_playlist_tracks(playlist_id: str) -> list[str]:
@@ -249,14 +275,21 @@ def get_playlist_tracks(playlist_id: str) -> list[str]:
     Retrieve all track URIs from a specific Spotify playlist.
     Returns a list of track URIs.
     """
-    log.debug(f"[get_playlist_tracks] Fetching tracks for playlist_id={playlist_id}")
+    log.debug(f"Fetching tracks for playlist_id={playlist_id}")
     if not playlist_id:
-        log.warning(
-            "[get_playlist_tracks] No playlist_id provided; returning empty list."
+        log.warning("No playlist_id provided; returning empty list.")
+        return []
+
+    try:
+        sp = get_spotify_client()
+        log.debug(f"Spotify client initialized for playlist_id={playlist_id}")
+    except Exception as e:
+        log.error(
+            f"Failed to initialize Spotify client for playlist_id={playlist_id}: {e}",
+            exc_info=True,
         )
         return []
 
-    sp = get_spotify_client()
     tracks = []
     offset = 0
 
@@ -269,22 +302,53 @@ def get_playlist_tracks(playlist_id: str) -> list[str]:
                 limit=100,
                 offset=offset,
             )
-            items = response.get("items", [])
-            uris = [item["track"]["uri"] for item in items if item.get("track")]
-            tracks.extend(uris)
+            if not isinstance(response, dict):
+                log.error(
+                    f"Unexpected response type for playlist_id={playlist_id}: {type(response)}"
+                )
+                break
+
+            items = response.get("items")
+            total = response.get("total")
+            next_page = response.get("next")
+
+            if items is None or total is None:
+                log.error(
+                    f"Missing 'items' or 'total' in response for playlist_id={playlist_id}"
+                )
+                break
+
             log.debug(
-                f"[get_playlist_tracks] Retrieved {len(uris)} tracks (offset={offset})"
+                f"Retrieved batch of {len(items)} items at offset {offset} for playlist_id={playlist_id}, total expected: {total}"
             )
 
-            if not response.get("next"):
+            uris = []
+            for item in items:
+                track = item.get("track")
+                if track and "uri" in track:
+                    uris.append(track["uri"])
+                else:
+                    log.debug(
+                        f"Skipping item without valid track or URI at offset {offset} for playlist_id={playlist_id}"
+                    )
+
+            tracks.extend(uris)
+            log.debug(
+                f"Added {len(uris)} track URIs from current batch for playlist_id={playlist_id}"
+            )
+
+            if not next_page:
+                log.debug(f"No more pages to fetch for playlist_id={playlist_id}")
                 break
+
             offset += 100
 
-        log.info(f"[get_playlist_tracks] Total tracks retrieved: {len(tracks)}")
+        log.info(f"Total tracks retrieved: {len(tracks)} for playlist_id={playlist_id}")
         return tracks
 
     except Exception as e:
         log.error(
-            f"[get_playlist_tracks] ❌ Failed to retrieve playlist tracks for {playlist_id}: {e}"
+            f"❌ Failed to retrieve playlist tracks for {playlist_id}: {e}",
+            exc_info=True,
         )
         return []
