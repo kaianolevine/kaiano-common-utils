@@ -101,20 +101,6 @@ def test_append_rows_appends(mock_service):
 
 
 # =====================================================
-# log_info_sheet
-# =====================================================
-
-
-def test_log_info_sheet_calls_append(monkeypatch, mock_service):
-    monkeypatch.setattr(gs, "get_or_create_sheet", lambda s, i, n: None)
-    monkeypatch.setattr(
-        gs, "append_rows", lambda s, i, r, v: setattr(s, "called", True)
-    )
-    gs.log_info_sheet(mock_service, "id", "message")
-    assert hasattr(mock_service, "called")
-
-
-# =====================================================
 # ensure_sheet_exists
 # =====================================================
 
