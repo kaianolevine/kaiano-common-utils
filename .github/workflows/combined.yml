@@ -26,18 +26,27 @@ jobs:
           poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=0
       - name: Check coverage threshold (warn except main)
         run: |
-          COVERAGE=$(poetry run coverage report | tail -n 1 | awk '{print $4}' | tr -d '%')
           THRESHOLD=80
+          echo "📊 Checking coverage threshold..."
+          TOTAL_LINE=$(poetry run coverage report | tail -n 1)
+          echo "Coverage summary line: $TOTAL_LINE"
+          COVERAGE=$(echo "$TOTAL_LINE" | awk '{print $4}' | tr -d '%')
+          echo "Detected total coverage: ${COVERAGE:-unknown}%"
           if [ -z "$COVERAGE" ]; then
-            echo "Warning: Could not determine coverage percentage."
+            echo "⚠️ Could not determine coverage percentage. Skipping check."
             exit 0
           fi
+
           if [ "$COVERAGE" -lt "$THRESHOLD" ]; then
-            echo "Warning: Coverage ($COVERAGE%) is below the threshold ($THRESHOLD%)."
+            echo "⚠️ Coverage ($COVERAGE%) is below the threshold ($THRESHOLD%)."
             if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-              echo "Failing build on main branch due to coverage threshold."
-              #exit 2
+              echo "❌ Failing build on main branch due to coverage threshold."
+              exit 2
+            else
+              echo "✅ Continuing despite low coverage (non-main branch)."
             fi
+          else
+            echo "✅ Coverage ($COVERAGE%) meets threshold ($THRESHOLD%)."
           fi
 
   bump:
