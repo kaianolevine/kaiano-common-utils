@@ -30,7 +30,7 @@ jobs:
           echo "📊 Checking coverage threshold..."
           TOTAL_LINE=$(poetry run coverage report | tail -n 1)
           echo "Coverage summary line: $TOTAL_LINE"
-          COVERAGE=$(echo "$TOTAL_LINE" | awk '{print $4}' | tr -d '%')
+          COVERAGE=$(echo "$TOTAL_LINE" | awk '{print $NF}' | tr -d '%')
           echo "Detected total coverage: ${COVERAGE:-unknown}%"
           if [ -z "$COVERAGE" ]; then
             echo "⚠️ Could not determine coverage percentage. Skipping check."
