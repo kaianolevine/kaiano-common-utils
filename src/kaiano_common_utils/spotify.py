@@ -26,7 +26,7 @@ def get_spotify_client() -> Spotify:
     global _spotify_client
     if _spotify_client is not None:
         return _spotify_client
-    if config.SPOTIFY_REFRESH_TOKEN:
+    if config.SPOTIPY_REFRESH_TOKEN:
         log.debug("🔄 Using refresh-token authentication.")
         _spotify_client = get_spotify_client_from_refresh()
     else:

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Load from .env if it exists (useful for local development)
 load_dotenv()
 
-LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "").upper()
+LOGGING_LEVEL = os.getenv("LOGGING_LEVEL").upper()
 
 # Folders and Spreadsheets IDs and Names
 # DJ_SETS = "11zVwUZLDfB6uXpwNdA3c4Xsev2aG26fc"  # My Drive/Deejay Marvel/DJ Sets
@@ -32,14 +32,14 @@ PRIVATE_HISTORY_SPREADSHEET_ID = (
 )
 
 # Spotify configuration
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-SPOTIFY_REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
-SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 SPOTIPY_REFRESH_TOKEN = os.getenv("SPOTIPY_REFRESH_TOKEN")
 SPOTIPY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+SPOTIFY_CLIENT_ID = SPOTIPY_CLIENT_ID
+SPOTIFY_CLIENT_SECRET = SPOTIPY_CLIENT_SECRET
+SPOTIFY_REFRESH_TOKEN = SPOTIPY_REFRESH_TOKEN
+SPOTIFY_REDIRECT_URI = SPOTIPY_REDIRECT_URI
 SPOTIFY_USERNAME = "31oya3ie2f5wwlqt6tnfurou6zzq"  # Deejey Marvel Automations
 SPOTIFY_PLAYLIST_ID = "5UgPYNOMpFXzuqzDJeervs"  # TestPlaylist
 
