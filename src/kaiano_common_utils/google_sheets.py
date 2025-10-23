@@ -120,14 +120,6 @@ def append_rows(service, spreadsheet_id: str, range_name: str, values: list) -> 
         raise
 
 
-def log_info_sheet(service, spreadsheet_id: str, message: str):
-    log.info(
-        f"Logging message to Info sheet in spreadsheet_id={spreadsheet_id}: {message}"
-    )
-    get_or_create_sheet(service, spreadsheet_id, "Info")
-    append_rows(service, spreadsheet_id, "Info!A1", [[message]])
-
-
 # Ensure all required sheet tabs exist in a spreadsheet
 def ensure_sheet_exists(
     service, spreadsheet_id: str, sheet_name: str, headers: list[str] = None
