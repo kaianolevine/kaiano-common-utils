@@ -23,7 +23,7 @@ jobs:
         run: poetry run pre-commit run --all-files
       - name: Run tests, enforce coverage threshold (warn on fail, only fail on main)
         run: |
-          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing || EXIT_CODE=$?
+          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=80 || EXIT_CODE=$?
           if [ "${EXIT_CODE:-0}" -eq 2 ]; then
             echo "Warning: Coverage did not reach the required threshold."
             #if [ "${{ github.ref }}" = "refs/heads/main" ]; then
