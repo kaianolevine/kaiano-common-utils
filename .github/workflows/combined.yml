@@ -23,7 +23,7 @@ jobs:
         run: poetry run pre-commit run --all-files
       - name: Run tests with coverage (no fail-under)
         run: |
-          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=0
+          poetry run pytest --cov=src --cov-report=term-missing --cov-fail-under=0
       - name: Check coverage threshold (warn except main)
         run: |
           THRESHOLD=80
