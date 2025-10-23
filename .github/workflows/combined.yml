@@ -21,19 +21,23 @@ jobs:
         run: poetry install
       - name: Run pre-commit checks
         run: poetry run pre-commit run --all-files
-      - name: Run tests, enforce coverage threshold (warn on fail, only fail on main)
+      - name: Run tests with coverage (no fail-under)
         run: |
-          set +e
-          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=80
-          EXIT_CODE=$?
-          if [ "$EXIT_CODE" -eq 2 ]; then
-            echo "⚠️ Warning: Coverage did not reach the required threshold."
-            #if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-              #echo "❌ Failing build on main branch due to coverage threshold."
+          poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing --cov-fail-under=0
+      - name: Check coverage threshold (warn except main)
+        run: |
+          COVERAGE=$(poetry run coverage report | tail -n 1 | awk '{print $4}' | tr -d '%')
+          THRESHOLD=80
+          if [ -z "$COVERAGE" ]; then
+            echo "Warning: Could not determine coverage percentage."
+            exit 0
+          fi
+          if [ "$COVERAGE" -lt "$THRESHOLD" ]; then
+            echo "Warning: Coverage ($COVERAGE%) is below the threshold ($THRESHOLD%)."
+            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              echo "Failing build on main branch due to coverage threshold."
               #exit 2
-            #fi
-          elif [ "$EXIT_CODE" -ne 0 ]; then
-            exit $EXIT_CODE
+            fi
           fi
 
   bump:

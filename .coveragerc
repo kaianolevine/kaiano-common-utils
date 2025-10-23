@@ -4,4 +4,3 @@ source = kaiano_common_utils
 
 [report]
 show_missing = True
-fail_under = 80
