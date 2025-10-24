@@ -209,7 +209,7 @@ def add_tracks_to_specific_playlist(
         log.info(f"Removed {duplicates_removed} duplicate track(s) from input list.")
 
     sp = get_spotify_client()
-xf
+
     if allowDuplicates:
         # Add all unique URIs without checking existing playlist content
         uris_to_add = unique_uris
@@ -262,16 +262,7 @@ xf
 def find_playlist_by_name(name: str):
     """Return a dict with playlist ID and metadata if a playlist exists with the given name."""
     log.debug(
-        f"-------------------------------------------Searching for playlist: {name}"
-    )
-    log.debug(
-        f"-------------------------------------------Searching for playlist: {name}"
-    )
-    log.debug(
-        f"-------------------------------------------Searching for playlist: {name}"
-    )
-    log.debug(
-        f"-------------------------------------------Searching for playlist: {name}"
+        f"Searching for playlist: {name}"
     )
 
     try:
