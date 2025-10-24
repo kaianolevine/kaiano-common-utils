@@ -16,44 +16,27 @@ def apply_sheet_formatting(sheet):
     # Bold the header row
     sheet.format("1:1", {"textFormat": {"bold": True}})
 
-    # Auto resize first 10 columns (A-J)
-    sheet.spreadsheet.batch_update(
-        {
-            "requests": [
-                {
-                    "autoResizeDimensions": {
-                        "dimensions": {
-                            "sheetId": sheet._properties["sheetId"],
-                            "dimension": "COLUMNS",
-                            "startIndex": 0,
-                            "endIndex": 10,
-                        }
-                    }
-                }
-            ]
-        }
-    )
-
 
 def apply_formatting_to_sheet(spreadsheet_id):
-    log.debug(f"Applying formatting to spreadsheet ID: {spreadsheet_id}")
+    log.debug(f"Applying formatting to all sheets in spreadsheet ID: {spreadsheet_id}")
     try:
         gc = google_sheets.get_gspread_client()
         sh = gc.open_by_key(spreadsheet_id)
-        sheet = sh.sheet1
-        log.debug("Opened sheet for formatting")
+        worksheets = sh.worksheets()
+        log.debug(f"Found {len(worksheets)} sheet(s) to format")
 
-        # Get all values to determine range size
-        values = sheet.get_all_values()
-        if not values or len(values) == 0 or len(values[0]) == 0:
-            log.warning("Sheet is empty, skipping formatting")
-            return
+        for sheet in worksheets:
+            log.debug(f"Formatting sheet: {sheet.title}")
+            values = sheet.get_all_values()
+            if not values or len(values) == 0 or len(values[0]) == 0:
+                log.warning(f"Sheet '{sheet.title}' is empty, skipping formatting")
+                continue
 
-        apply_sheet_formatting(sheet)
+            apply_sheet_formatting(sheet)
 
-        log.info("✅ Formatting applied successfully")
+        log.info("✅ Formatting applied successfully to all sheets")
     except Exception as e:
-        log.error(f"Error applying formatting: {e}")
+        log.error(f"Error applying formatting to sheets: {e}")
 
 
 def set_values(
@@ -609,6 +592,21 @@ def format_summary_sheet(
                     "startIndex": 0,
                     "endIndex": num_columns,
                 }
+            }
+        }
+    )
+    # Add buffer to column widths (e.g., 1.2x the auto-sized width, or a fixed pixel size as an approximation)
+    requests.append(
+        {
+            "updateDimensionProperties": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": 0,
+                    "endIndex": num_columns,
+                },
+                "properties": {"pixelSize": 120},  # Approximate width buffer
+                "fields": "pixelSize",
             }
         }
     )
