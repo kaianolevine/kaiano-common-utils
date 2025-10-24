@@ -161,7 +161,6 @@ def trim_playlist_to_limit(limit: int = 200) -> None:
         config.SPOTIFY_PLAYLIST_ID, uris_to_remove
     )
     log.info(f"Removed {len(uris_to_remove)} old tracks to stay under {limit}.")
-    print(f"🗑️ Removed {len(uris_to_remove)} old tracks to stay under {limit}.")
 
 
 def create_playlist(
@@ -201,7 +200,6 @@ def add_tracks_to_specific_playlist(
         raise ValueError("Missing playlist_id parameter.")
     if not uris:
         log.warning("No tracks to add.")
-        print("No tracks to add.")
         return
 
     # Remove duplicates in the provided list, preserving order
@@ -211,7 +209,7 @@ def add_tracks_to_specific_playlist(
         log.info(f"Removed {duplicates_removed} duplicate track(s) from input list.")
 
     sp = get_spotify_client()
-
+xf
     if allowDuplicates:
         # Add all unique URIs without checking existing playlist content
         uris_to_add = unique_uris
@@ -255,16 +253,10 @@ def add_tracks_to_specific_playlist(
             if not allowDuplicates
             else "No tracks to add."
         )
-        print(
-            "No new tracks to add; all provided tracks are already in the playlist."
-            if not allowDuplicates
-            else "No tracks to add."
-        )
         return
 
     sp.playlist_add_items(playlist_id, uris_to_add)
     log.info(f"Added {len(uris_to_add)} track(s) to playlist {playlist_id}.")
-    print(f"✅ Added {len(uris_to_add)} track(s) to playlist.")
 
 
 def find_playlist_by_name(name: str):
