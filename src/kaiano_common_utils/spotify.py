@@ -261,9 +261,7 @@ def add_tracks_to_specific_playlist(
 
 def find_playlist_by_name(name: str):
     """Return a dict with playlist ID and metadata if a playlist exists with the given name."""
-    log.debug(
-        f"Searching for playlist: {name}"
-    )
+    log.debug(f"Searching for playlist: {name}")
 
     try:
         sp = get_spotify_client_from_refresh()
