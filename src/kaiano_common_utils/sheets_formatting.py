@@ -41,27 +41,10 @@ def apply_sheet_formatting(sheet):
                 }
             }
         }
-        # 2. Add a buffer to the pixel size (e.g., +32px)
-        buffer_pixel_size = 32
-        update_pixel_req = {
-            "updateDimensionProperties": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "dimension": "COLUMNS",
-                    "startIndex": 0,
-                    "endIndex": num_columns,
-                },
-                "properties": {
-                    "pixelSize": 100
-                    + buffer_pixel_size  # This is an approximation; actual auto size is not retrievable, so set a reasonable default+buffer
-                },
-                "fields": "pixelSize",
-            }
-        }
         # Send both requests (auto-resize, then buffer)
         sheets_service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
-            body={"requests": [auto_resize_req, update_pixel_req]},
+            body={"requests": [auto_resize_req]},
         ).execute()
     except Exception as e:
         log.warning(f"Auto-resize and buffer for columns failed: {e}")
