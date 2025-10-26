@@ -3,11 +3,13 @@ import logging
 
 from dotenv import load_dotenv
 
+import kaiano_common_utils.config as config
+
 # Load from .env if it exists (useful for local development)
 load_dotenv()
 
 
-default_level = logging.WARNING
+default_level = config.LOGGING_LEVEL
 logging.basicConfig(
     level=default_level,
     format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d - %(funcName)s] %(message)s",

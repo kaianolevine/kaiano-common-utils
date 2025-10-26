@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Load from .env if it exists (useful for local development)
 load_dotenv()
 
-LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "").upper()
+LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "DEBUG").upper()
 
 # Folders and Spreadsheets IDs and Names
 # DJ_SETS = "11zVwUZLDfB6uXpwNdA3c4Xsev2aG26fc"  # My Drive/Deejay Marvel/DJ Sets
