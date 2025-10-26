@@ -1,13 +1,7 @@
 import datetime
 import logging
-import os
 
-from dotenv import load_dotenv
-
-# Load from .env if it exists (useful for local development)
-load_dotenv()
-UTILS_LOGGING_LEVEL = os.getenv("UTILS_LOGGING_LEVEL", "").upper()
-default_level = UTILS_LOGGING_LEVEL
+default_level = logging.WARNING
 logging.basicConfig(
     level=default_level,
     format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d - %(funcName)s] %(message)s",
