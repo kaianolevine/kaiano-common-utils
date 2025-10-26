@@ -107,8 +107,8 @@ def search_track(artist: str, title: str) -> str | None:
                 string_original_track = f"{artist} - {title}"
                 string_found_track = f"{found_artist} - {found_title}"
                 if string_original_track.lower() != string_found_track.lower():
-                    log.critical(
-                        f"----Original track: {string_original_track} (URI: {tracks[0]['uri']})"
+                    log.warning(
+                        f"----Original track: {string_original_track} (URI: {tracks[0]['uri']})\n"
                         f"----Found track: {string_found_track} (URI: {tracks[0]['uri']})"
                     )
                 else:
@@ -119,14 +119,14 @@ def search_track(artist: str, title: str) -> str | None:
             else:
                 # No tracks found, fallback to relaxed query with only title
                 if attempt == 0:
-                    log.debug(
+                    log.critical(
                         "No track found with full query; retrying with relaxed query."
                     )
                     query = f"track:{title}"
                     continue
                 else:
                     log.warning(
-                        f"No track found for the given artist/title: {artist} - {title}"
+                        f"----No track found for the given artist/title: {artist} - {title}"
                     )
                     return None
         except SpotifyException as e:
