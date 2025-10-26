@@ -109,11 +109,13 @@ def search_track(artist: str, title: str) -> str | None:
                 if string_original_track.lower() != string_found_track.lower():
                     log.warning(
                         f"----Original track: {string_original_track} (URI: {tracks[0]['uri']})\n"
+                    )
+                    log.warning(
                         f"----Found track: {string_found_track} (URI: {tracks[0]['uri']})"
                     )
                 else:
                     log.info(
-                        f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
+                        # f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
                     )
                 return tracks[0]["uri"]
             else:
