@@ -98,7 +98,18 @@ def search_track(artist: str, title: str) -> str | None:
             tracks = results.get("tracks", {}).get("items", [])
             log.debug(f"Number of tracks found: {len(tracks)}")
             if tracks:
-                log.info(f"Found track: {artist} - {title} (URI: {tracks[0]['uri']})")
+                found_artist = (
+                    tracks[0]["artists"][0]["name"]
+                    if tracks[0].get("artists")
+                    else "Unknown Artist"
+                )
+                found_title = tracks[0].get("name", "Unknown Title")
+                log.critical(
+                    f"Original track: {artist} - {title} (URI: {tracks[0]['uri']})"
+                )
+                log.critical(
+                    f"Found track: {found_artist} - {found_title} (URI: {tracks[0]['uri']})"
+                )
                 return tracks[0]["uri"]
             else:
                 # No tracks found, fallback to relaxed query with only title
