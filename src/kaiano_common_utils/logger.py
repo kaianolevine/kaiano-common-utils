@@ -1,17 +1,20 @@
 import datetime
 import logging
+import os
 
-from kaiano_common_utils import config
+from dotenv import load_dotenv
 
-default_level = config.LOGGING_LEVEL
-
+# Load from .env if it exists (useful for local development)
+load_dotenv()
+UTILS_LOGGING_LEVEL = os.getenv("UTILS_LOGGING_LEVEL", "").upper()
+default_level = UTILS_LOGGING_LEVEL
 logging.basicConfig(
-    level=getattr(logging, default_level, logging.DEBUG),
-    format="%(asctime)s [%(levelname)s] [%(name)s.%(funcName)s] %(message)s",
+    level=default_level,
+    format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d - %(funcName)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-
-logger = logging.getLogger("core")
+logger = logging.getLogger("kaiano_common_utils")
+logging.getLogger().warning(f"Logger level set to: {default_level}")
 
 # Shortcut aliases
 debug = logger.debug
@@ -21,18 +24,21 @@ error = logger.error
 exception = logger.exception
 
 
-def get_logger():
-    level_to_set = default_level
+def set_logger_level(level_to_set):
     normalized_level = level_to_set.upper()
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if normalized_level in valid_levels:
         logger.setLevel(getattr(logging, normalized_level))
-        logging.getLogger().info(f"Logger level set to: {normalized_level}")
+        logging.getLogger().warning(f"Logger level set to: {normalized_level}")
     else:
         logging.getLogger().warning(
             f"Invalid logging level: {level_to_set}. Level not changed.\n"
-            f"config.LOGGING_LEVEL: {config.LOGGING_LEVEL}, or DEBUG"
+            f"default_level: {default_level}"
         )
+    return logger
+
+
+def get_logger():
     return logger
 
 
