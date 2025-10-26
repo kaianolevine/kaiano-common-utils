@@ -16,6 +16,56 @@ def apply_sheet_formatting(sheet):
     # Bold the header row
     sheet.format("1:1", {"textFormat": {"bold": True}})
 
+    # --- Auto-resize all columns, then add a buffer to their width using Google Sheets API ---
+    try:
+        # Get spreadsheet and sheet info
+        spreadsheet_id = sheet.spreadsheet.id
+        sheet_id = sheet.id
+        sheets_service = google_sheets.get_sheets_service()
+
+        # Determine number of columns (by checking first row's length)
+        values = sheet.get_all_values()
+        if values and len(values) > 0:
+            num_columns = len(values[0])
+        else:
+            num_columns = 26  # fallback default to 26 columns (A-Z)
+
+        # 1. Auto-resize all columns
+        auto_resize_req = {
+            "autoResizeDimensions": {
+                "dimensions": {
+                    "sheetId": sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": 0,
+                    "endIndex": num_columns,
+                }
+            }
+        }
+        # 2. Add a buffer to the pixel size (e.g., +32px)
+        buffer_pixel_size = 32
+        update_pixel_req = {
+            "updateDimensionProperties": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": 0,
+                    "endIndex": num_columns,
+                },
+                "properties": {
+                    "pixelSize": 100
+                    + buffer_pixel_size  # This is an approximation; actual auto size is not retrievable, so set a reasonable default+buffer
+                },
+                "fields": "pixelSize",
+            }
+        }
+        # Send both requests (auto-resize, then buffer)
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": [auto_resize_req, update_pixel_req]},
+        ).execute()
+    except Exception as e:
+        log.warning(f"Auto-resize and buffer for columns failed: {e}")
+
 
 def apply_formatting_to_sheet(spreadsheet_id):
     log.debug(f"Applying formatting to all sheets in spreadsheet ID: {spreadsheet_id}")
