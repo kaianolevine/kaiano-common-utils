@@ -294,7 +294,7 @@ def download_file(service, file_id, destination_path):
         chunk_count += 1
         progress_percent = int(status.progress() * 100) if status else 0
         log.debug(f"Chunk {chunk_count}: Download progress {progress_percent}%")
-        print(f"⬇️  Download {progress_percent}%.")
+        log.info(f"⬇️  Download {progress_percent}%.")
     log.info(f"Download complete for file_id={file_id} to {destination_path}")
     log.debug(f"Total chunks downloaded: {chunk_count}")
 
