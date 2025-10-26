@@ -119,18 +119,10 @@ def search_track(artist: str, title: str) -> str | None:
                     )
                 return tracks[0]["uri"]
             else:
-                # No tracks found, fallback to relaxed query with only title
-                if attempt == 0:
-                    log.critical(
-                        "No track found with full query; retrying with relaxed query."
-                    )
-                    query = f"track:{title}"
-                    continue
-                else:
-                    log.warning(
-                        f"----No track found for the given artist/title: {artist} - {title}"
-                    )
-                    return None
+                log.warning(
+                    f"----No track found for the given artist/title: {artist} - {title}"
+                )
+                return None
         except SpotifyException as e:
             if e.http_status == 429:
                 retry_after = int(e.headers.get("Retry-After", 2))
