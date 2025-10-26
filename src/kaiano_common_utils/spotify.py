@@ -115,7 +115,7 @@ def search_track(artist: str, title: str) -> str | None:
                     )
                 else:
                     log.info(
-                        # f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
+                        f"----Found track: {string_found_track} (URI: {tracks[0]['uri']})"
                     )
                 return tracks[0]["uri"]
             else:
