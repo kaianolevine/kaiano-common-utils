@@ -1,6 +1,5 @@
 import datetime
 import logging
-import os
 
 from dotenv import load_dotenv
 
@@ -14,24 +13,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d - %(funcName)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("kaiano_common_utils")
-
-level_to_set = os.getenv("UTILS_LOGGING_LEVEL", "").upper()
-valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-if level_to_set in valid_levels:
-    logger.warning(f"Logger level set to: {level_to_set}")
-    logging.basicConfig(
-        level=level_to_set,
-        format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d - %(funcName)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    logger.warning(f"Logger level set to: {level_to_set}")
-else:
-    logger.warning(
-        f"Invalid logging level: {level_to_set}. Level not changed.\n"
-        f"default_level: {default_level}"
-    )
-
+logger = logging.getLogger("core")
 
 # Shortcut aliases
 debug = logger.debug
