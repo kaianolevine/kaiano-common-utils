@@ -66,7 +66,7 @@ def get_most_recent_m3u_file(drive_service):
 
 
 def download_m3u_file(drive_service, file_id):
-    log.info(f"Starting download of .m3u file with ID: {file_id}")
+    log.debug(f"Starting download of .m3u file with ID: {file_id}")
     try:
         request = drive_service.files().get_media(fileId=file_id)
         fh = io.BytesIO()
@@ -77,7 +77,7 @@ def download_m3u_file(drive_service, file_id):
             if status:
                 log.debug(f"Download progress: {int(status.progress() * 100)}%")
         lines = fh.getvalue().decode("utf-8").splitlines()
-        log.info(f"Downloaded and read {len(lines)} lines from .m3u file.")
+        log.debug(f"Downloaded and read {len(lines)} lines from .m3u file.")
         return lines
     except Exception as e:
         log.error(f"Failed to download .m3u file with ID {file_id}: {e}")

@@ -50,7 +50,7 @@ def list_files_in_folder(
         query += " and mimeType != 'application/vnd.google-apps.folder'"
     if mime_type_filter:
         query += f" and mimeType = '{mime_type_filter}'"
-        log.info(f"Applying mime_type_filter: {mime_type_filter}")
+        log.debug(f"Applying mime_type_filter: {mime_type_filter}")
     query += " and trashed = false"
     log.debug(f"Drive query: {query}")
     files = []
@@ -207,7 +207,7 @@ def get_all_subfolders(drive_service, parent_folder_id: str) -> List[Dict]:
     Returns a list of all subfolders in the specified parent folder.
     Supports Shared Drives.
     """
-    log.info(
+    log.debug(
         f"📂 Retrieving all subfolders in folder ID {parent_folder_id} (shared drives enabled)"
     )
     try:
@@ -231,7 +231,7 @@ def get_all_subfolders(drive_service, parent_folder_id: str) -> List[Dict]:
             page_token = response.get("nextPageToken", None)
             if page_token is None:
                 break
-        log.info(f"📂 Found {len(folders)} subfolders under {parent_folder_id}")
+        log.debug(f"📂 Found {len(folders)} subfolders under {parent_folder_id}")
         return folders
     except HttpError as error:
         log.error(f"An error occurred while retrieving subfolders: {error}")
@@ -270,7 +270,7 @@ def download_file(service, file_id, destination_path):
     log.debug(
         f"download_file called with file_id={file_id}, destination_path={destination_path}"
     )
-    log.info(f"Starting download for file_id={file_id} to {destination_path}")
+    log.debug(f"Starting download for file_id={file_id} to {destination_path}")
 
     log.debug("Preparing request for file download")
     # Prepare request for file download
@@ -288,13 +288,13 @@ def download_file(service, file_id, destination_path):
     downloader = MediaIoBaseDownload(fh, request)
     done = False
     chunk_count = 0
-    log.info("Beginning chunked download")
+    log.debug("Beginning chunked download")
     while not done:
         status, done = downloader.next_chunk()
         chunk_count += 1
         progress_percent = int(status.progress() * 100) if status else 0
         log.debug(f"Chunk {chunk_count}: Download progress {progress_percent}%")
-        log.info(f"⬇️  Download {progress_percent}%.")
+        log.debug(f"⬇️  Download {progress_percent}%.")
     log.info(f"Download complete for file_id={file_id} to {destination_path}")
     log.debug(f"Total chunks downloaded: {chunk_count}")
 
@@ -323,7 +323,7 @@ def upload_to_drive(drive, filepath, parent_id):
         )
         .execute()
     )
-    log.info(f"📄 Uploaded to Drive as Google Sheet: {filepath}")
+    log.debug(f"📄 Uploaded to Drive as Google Sheet: {filepath}")
     log.debug(f"Uploaded file ID: {uploaded['id']}")
 
     # TODO - move this to a sheets function
@@ -349,7 +349,7 @@ def create_spreadsheet(
     This function supports Shared Drives (supportsAllDrives=True).
     Returns the file ID.
     """
-    log.info(
+    log.debug(
         f"🔍 Searching for file '{name}' in folder ID {parent_folder_id} (shared drives enabled)"
     )
     try:
@@ -367,10 +367,10 @@ def create_spreadsheet(
         )
         files = response.get("files", [])
         if files:
-            log.info(f"📄 Found existing file '{name}' with ID {files[0]['id']}")
+            log.debug(f"📄 Found existing file '{name}' with ID {files[0]['id']}")
             return files[0]["id"]
         else:
-            log.info(
+            log.debug(
                 f"➕ No existing file named '{name}' — creating new one in parent {parent_folder_id}"
             )
             file_metadata = {
@@ -383,7 +383,7 @@ def create_spreadsheet(
                 .create(body=file_metadata, fields="id", supportsAllDrives=True)
                 .execute()
             )
-            log.info(f"🆕 Created new file '{name}' with ID {file['id']}")
+            log.debug(f"🆕 Created new file '{name}' with ID {file['id']}")
             return file["id"]
     except HttpError as error:
         log.error(f"An error occurred while finding or creating file: {error}")
@@ -429,7 +429,7 @@ def find_or_create_file_by_name(
     This function supports Shared Drives (supportsAllDrives=True).
     Returns the file ID.
     """
-    log.info(
+    log.debug(
         f"🔍 Searching for file '{name}' in folder ID {parent_folder_id} (shared drives enabled)"
     )
     try:
@@ -447,10 +447,10 @@ def find_or_create_file_by_name(
         )
         files = response.get("files", [])
         if files:
-            log.info(f"📄 Found existing file '{name}' with ID {files[0]['id']}")
+            log.debug(f"📄 Found existing file '{name}' with ID {files[0]['id']}")
             return files[0]["id"]
         else:
-            log.info(
+            log.debug(
                 f"➕ No existing file named '{name}' — creating new one in parent {parent_folder_id}"
             )
             file_metadata = {
@@ -463,7 +463,7 @@ def find_or_create_file_by_name(
                 .create(body=file_metadata, fields="id", supportsAllDrives=True)
                 .execute()
             )
-            log.info(f"🆕 Created new file '{name}' with ID {file['id']}")
+            log.debug(f"🆕 Created new file '{name}' with ID {file['id']}")
             return file["id"]
     except HttpError as error:
         log.error(f"An error occurred while finding or creating file: {error}")

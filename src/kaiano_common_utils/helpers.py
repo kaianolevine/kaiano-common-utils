@@ -79,7 +79,7 @@ def try_lock_folder(folder_name):
     results = drive_service.files().list(q=query, fields="files(id, name)").execute()
     files = results.get("files", [])
     if files:
-        log.info(f"🔒 {folder_name} folder is locked — skipping.")
+        log.debug(f"🔒 {folder_name} folder is locked — skipping.")
         return False
     # Create lock file
     file_metadata = {
@@ -218,7 +218,7 @@ def normalize_csv(file_path):
     log.debug(f"Lines after cleaning: {len(cleaned_lines)}")
     with open(file_path, "w") as f:
         f.write("\n".join(cleaned_lines))
-    log.info(f"✅ Normalized: {file_path}")
+    log.debug(f"✅ Normalized: {file_path}")
 
 
 def normalize_prefixes_in_source(drive):
@@ -244,7 +244,7 @@ def normalize_prefixes_in_source(drive):
             .execute()
         )
         files = resp.get("files", [])
-        log.info(f"normalize_prefixes_in_source: found {len(files)} files to inspect")
+        log.debug(f"normalize_prefixes_in_source: found {len(files)} files to inspect")
 
         for f in files:
             original_name = f.get("name", "")
@@ -280,7 +280,7 @@ def normalize_prefixes_in_source(drive):
                         .execute()
                     )
                     if exists_resp.get("files"):
-                        log.info(
+                        log.debug(
                             f"normalize_prefixes_in_source: target name '{new_name}' already exists in source folder — leaving '{original_name}' as-is"
                         )
                         continue
@@ -290,7 +290,7 @@ def normalize_prefixes_in_source(drive):
                     )
 
                 try:
-                    log.info(
+                    log.debug(
                         f"normalize_prefixes_in_source: renaming '{original_name}' -> '{new_name}'"
                     )
                     drive.files().update(
