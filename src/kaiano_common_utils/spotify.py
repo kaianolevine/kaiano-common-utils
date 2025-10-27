@@ -76,7 +76,7 @@ def get_spotify_client_from_refresh() -> Spotify:
     )
 
     try:
-        log.info("Refreshing Spotify access token...")
+        log.debug("Refreshing Spotify access token...")
         token_info = auth_manager.refresh_access_token(refresh_token)
         log.info("Obtained new Spotify access token.")
         return Spotify(auth=token_info["access_token"])
@@ -108,19 +108,19 @@ def search_track(artist: str, title: str) -> str | None:
                 string_found_track = f"{found_artist} - {found_title}"
                 if string_original_track.lower() != string_found_track.lower():
                     log.warning(
-                        f"----Original track: {string_original_track} (URI: {tracks[0]['uri']})\n"
+                        f"Original track: {string_original_track} (URI: {tracks[0]['uri']})\n"
                     )
                     log.warning(
-                        f"----Found track: {string_found_track} (URI: {tracks[0]['uri']})"
+                        f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
                     )
                 else:
                     log.info(
-                        f"----Found track: {string_found_track} (URI: {tracks[0]['uri']})"
+                        f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
                     )
                 return tracks[0]["uri"]
             else:
                 log.warning(
-                    f"----No track found for the given artist/title: {artist} - {title}"
+                    f"No track found for the given artist/title: {artist} - {title}"
                 )
                 return None
         except SpotifyException as e:
