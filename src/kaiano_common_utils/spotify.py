@@ -1,5 +1,6 @@
 import time
 
+import requests
 import spotipy
 from spotipy import Spotify
 from spotipy.exceptions import SpotifyException
@@ -92,6 +93,8 @@ def search_track(artist: str, title: str) -> str | None:
     log.debug(f"Constructed query: {query}")
 
     max_retries = 3
+    backoff_seconds = 2
+
     for attempt in range(max_retries):
         try:
             results = sp.search(q=query, type="track", limit=1)
@@ -108,7 +111,7 @@ def search_track(artist: str, title: str) -> str | None:
                 string_found_track = f"{found_artist} - {found_title}"
                 if string_original_track.lower() != string_found_track.lower():
                     log.warning(
-                        f"Original track: {string_original_track} (URI: {tracks[0]['uri']})\n"
+                        f"Original track: {string_original_track} (URI: {tracks[0]['uri']})"
                     )
                     log.warning(
                         f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
@@ -123,6 +126,18 @@ def search_track(artist: str, title: str) -> str | None:
                     f"No track found for the given artist/title: {artist} - {title}"
                 )
                 return None
+
+        except requests.exceptions.ReadTimeout as e:
+            log.warning(
+                f"Spotify request timed out on attempt {attempt+1}/{max_retries}: {e}"
+            )
+            if attempt < max_retries - 1:
+                time.sleep(backoff_seconds * (attempt + 1))
+                continue
+            else:
+                log.error("Exceeded retry limit due to repeated timeouts.")
+                return None
+
         except SpotifyException as e:
             if e.http_status == 429:
                 retry_after = int(e.headers.get("Retry-After", 2))
@@ -142,6 +157,11 @@ def search_track(artist: str, title: str) -> str | None:
             else:
                 log.error(f"SpotifyException encountered: {e}")
                 return None
+
+        except Exception as e:
+            log.error(f"Unexpected error during Spotify search: {e}", exc_info=True)
+            return None
+
     log.warning("Exhausted retries without success.")
     return None
 
