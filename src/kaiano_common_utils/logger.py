@@ -5,9 +5,7 @@ from dotenv import load_dotenv
 
 import kaiano_common_utils.config as config
 
-# Load from .env if it exists (useful for local development)
 load_dotenv()
-
 
 default_level = config.LOGGING_LEVEL
 logging.basicConfig(
