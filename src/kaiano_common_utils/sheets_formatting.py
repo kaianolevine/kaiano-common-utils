@@ -495,6 +495,69 @@ def set_column_formatting(
         raise
 
 
+def set_column_text_formatting(
+    sheets_service, spreadsheet_id: str, sheet_name: str, column_indexes
+):
+    """
+    Force plain text formatting for the given zero-based column indexes on a sheet.
+
+    This prevents Google Sheets from auto-parsing numeric-looking values (e.g., 2025)
+    into dates (e.g., 1905-07-17).
+
+    Args:
+        sheets_service: Authorized Google Sheets API service.
+        spreadsheet_id: ID of the spreadsheet.
+        sheet_name: Title of the target sheet.
+        column_indexes: Iterable of zero-based column indexes to format.
+    """
+    # Resolve the sheetId from the sheet name
+    meta = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet = next(
+        (
+            s
+            for s in meta.get("sheets", [])
+            if s.get("properties", {}).get("title") == sheet_name
+        ),
+        None,
+    )
+    if not sheet:
+        raise ValueError(
+            f"Sheet named '{sheet_name}' not found in spreadsheet {spreadsheet_id}"
+        )
+
+    sheet_id = sheet["properties"]["sheetId"]
+
+    # Apply TEXT number format (pattern "@") to the entire column, skipping the header row
+    requests = []
+    for col in column_indexes:
+        requests.append(
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 1,  # leave header row unmodified
+                        "startColumnIndex": int(col),
+                        "endColumnIndex": int(col) + 1,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "TEXT",
+                                "pattern": "@",
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat",
+                }
+            }
+        )
+
+    if requests:
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id, body={"requests": requests}
+        ).execute()
+
+
 def reorder_sheets(
     sheets_service,
     spreadsheet_id: str,
