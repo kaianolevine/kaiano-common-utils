@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from googleapiclient.errors import HttpError
 
@@ -73,7 +73,13 @@ def apply_formatting_to_sheet(spreadsheet_id):
 
 
 def set_values(
-    sheets_service, spreadsheet_id, sheet_name, start_row, start_col, values
+    sheets_service,
+    spreadsheet_id,
+    sheet_name,
+    start_row,
+    start_col,
+    values,
+    force_text: bool = True,
 ):
     """
     Sets values in a sheet starting at (start_row, start_col).
@@ -81,11 +87,18 @@ def set_values(
     end_row = start_row + len(values) - 1
     end_col = start_col + len(values[0]) - 1 if values else start_col
     range_name = f"{sheet_name}!R{start_row}C{start_col}:R{end_row}C{end_col}"
-    body = {"values": [[f"'{str(cell)}" for cell in row] for row in values]}
+    if force_text:
+        # Prefix with apostrophe to ensure USER_ENTERED treats as literal text
+        prepared = [[f"'{str(cell)}" for cell in row] for row in values]
+        value_input = "USER_ENTERED"
+    else:
+        prepared = values
+        value_input = "RAW"
+    body = {"values": prepared}
     sheets_service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
         range=range_name,
-        valueInputOption="RAW",
+        valueInputOption=value_input,
         body=body,
     ).execute()
 
@@ -185,6 +198,19 @@ def set_number_format(
     """
     Sets number format for a range.
     """
+    # Determine number format based on format_str
+    number_format = {}
+    if isinstance(format_str, str) and format_str:
+        upper = format_str.strip().upper()
+        if upper in {"TEXT", "@"}:
+            number_format = {"type": "TEXT"}
+        elif upper in {"DATE", "TIME", "DATETIME"}:
+            number_format = {"type": upper}
+        else:
+            # Treat as numeric pattern (e.g., "0", "0.00", "#,##0", "0000")
+            number_format = {"type": "NUMBER", "pattern": format_str}
+    else:
+        number_format = {"type": "NUMBER"}
     requests = [
         {
             "repeatCell": {
@@ -195,7 +221,7 @@ def set_number_format(
                     "startColumnIndex": start_col - 1,
                     "endColumnIndex": end_col,
                 },
-                "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                "cell": {"userEnteredFormat": {"numberFormat": number_format}},
                 "fields": "userEnteredFormat.numberFormat",
             }
         }
@@ -207,7 +233,7 @@ def set_number_format(
 
 
 def auto_resize_columns(
-    service, spreadsheet_id, sheet_id, start_col: int = 1, end_col: int | None = None
+    service, spreadsheet_id, sheet_id, start_col: int = 1, end_col: Optional[int] = None
 ):
     """Automatically resize columns in a given sheet range.
 
@@ -368,22 +394,20 @@ def set_sheet_formatting(
 
     # Set background colors for data rows (excluding header)
     if len(backgrounds) > 1:
+
+        def _bg(color: str):
+            try:
+                return {
+                    "userEnteredFormat": {"backgroundColor": helpers.hex_to_rgb(color)}
+                }
+            except Exception:
+                return {"userEnteredFormat": {}}
+
         bg_requests = []
         for row_idx, bg_colors in enumerate(backgrounds[1:], start=header_row_count):
             row_request = {
                 "updateCells": {
-                    "rows": [
-                        {
-                            "values": [
-                                {
-                                    "userEnteredFormat": {
-                                        "backgroundColor": helpers.hex_to_rgb(color)
-                                    }
-                                }
-                                for color in bg_colors
-                            ]
-                        }
-                    ],
+                    "rows": [{"values": [_bg(color) for color in bg_colors]}],
                     "fields": "userEnteredFormat.backgroundColor",
                     "start": {
                         "sheetId": sheet_id,
@@ -395,20 +419,19 @@ def set_sheet_formatting(
             bg_requests.append(row_request)
         requests.extend(bg_requests)
 
-    # Auto resize columns
-    for col in range(total_cols):
-        requests.append(
-            {
-                "autoResizeDimensions": {
-                    "dimensions": {
-                        "sheetId": sheet_id,
-                        "dimension": "COLUMNS",
-                        "startIndex": col,
-                        "endIndex": col + 1,
-                    }
+    # Auto resize columns (single request for all columns)
+    requests.append(
+        {
+            "autoResizeDimensions": {
+                "dimensions": {
+                    "sheetId": sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": 0,
+                    "endIndex": total_cols,
                 }
             }
-        )
+        }
+    )
     # Can't set max width directly via API; auto-resize only.
 
     body = {"requests": requests}
@@ -431,9 +454,13 @@ def set_column_formatting(
             sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         )
         sheet_id = None
+        row_count = 1000000
         for sheet in spreadsheet.get("sheets", []):
             if sheet["properties"]["title"] == sheet_name:
                 sheet_id = sheet["properties"]["sheetId"]
+                row_count = sheet["properties"]["gridProperties"].get(
+                    "rowCount", 1000000
+                )
                 break
         if sheet_id is None:
             log.warning(f"Sheet '{sheet_name}' not found for formatting")
@@ -448,7 +475,7 @@ def set_column_formatting(
                         "range": {
                             "sheetId": sheet_id,
                             "startRowIndex": 0,
-                            "endRowIndex": 1000000,
+                            "endRowIndex": row_count,
                             "startColumnIndex": 0,
                             "endColumnIndex": 1,
                         },
@@ -472,7 +499,7 @@ def set_column_formatting(
                         "range": {
                             "sheetId": sheet_id,
                             "startRowIndex": 0,
-                            "endRowIndex": 1000000,
+                            "endRowIndex": row_count,
                             "startColumnIndex": 1,
                             "endColumnIndex": num_columns,
                         },
@@ -725,6 +752,74 @@ def format_summary_sheet(
     )
 
     # Send all formatting requests in batch
-    sheet_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body={"requests": requests}
-    ).execute()
+    try:
+        sheet_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id, body={"requests": requests}
+        ).execute()
+    except HttpError as e:
+        log.error(f"Error formatting summary sheet '{sheet_name}': {e}")
+        raise
+
+
+# Optional convenience wrapper class for high-level formatting
+class SheetFormatter:
+    """Convenience wrapper that caches IDs and exposes high-level formatting helpers.
+    Existing functions remain available; this class is optional and non-breaking.
+    """
+
+    def __init__(self, sheets_service, spreadsheet_id: str):
+        self.service = sheets_service
+        self.spreadsheet_id = spreadsheet_id
+        meta = self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        self._title_to_id = {
+            s["properties"]["title"]: s["properties"]["sheetId"]
+            for s in meta.get("sheets", [])
+        }
+
+    def sheet_id(self, name: str) -> int:
+        sid = self._title_to_id.get(name)
+        if sid is None:
+            raise ValueError(f"Sheet '{name}' not found")
+        return sid
+
+    def text_columns(self, sheet_name: str, cols: List[int]):
+        set_column_text_formatting(self.service, self.spreadsheet_id, sheet_name, cols)
+
+    def number_format(
+        self,
+        sheet_name: str,
+        start_row: int,
+        end_row: int,
+        start_col: int,
+        end_col: int,
+        pattern: str,
+    ):
+        set_number_format(
+            self.service,
+            self.spreadsheet_id,
+            self.sheet_id(sheet_name),
+            start_row,
+            end_row,
+            start_col,
+            end_col,
+            pattern,
+        )
+
+    def freeze_headers(self, sheet_name: str, rows: int = 1):
+        freeze_rows(self.service, self.spreadsheet_id, self.sheet_id(sheet_name), rows)
+
+    def bold_header(self, sheet_name: str):
+        set_bold_font(
+            self.service, self.spreadsheet_id, self.sheet_id(sheet_name), 1, 1, 1, 26
+        )
+
+    def auto_resize(
+        self, sheet_name: str, start_col: int = 1, end_col: Optional[int] = None
+    ):
+        auto_resize_columns(
+            self.service,
+            self.spreadsheet_id,
+            self.sheet_id(sheet_name),
+            start_col,
+            end_col,
+        )
