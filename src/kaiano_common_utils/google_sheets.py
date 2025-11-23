@@ -8,6 +8,27 @@ from kaiano_common_utils import logger as log
 log = log.get_logger()
 
 
+# Helper for safe spreadsheet metadata retrieval with retries
+def safe_get_spreadsheet_metadata(
+    service, spreadsheet_id: str, max_retries: int = 3
+) -> Dict:
+    """
+    Safely retrieves spreadsheet metadata with exponential backoff retries.
+    """
+    for attempt in range(max_retries):
+        try:
+            return service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        except HttpError as e:
+            log.warning(
+                f"Metadata fetch failed (attempt {attempt + 1}/{max_retries}): {e}"
+            )
+            if attempt == max_retries - 1:
+                raise
+            import time
+
+            time.sleep(2**attempt)
+
+
 def get_sheets_service():
     return _google_credentials.get_sheets_client()
 
@@ -21,7 +42,8 @@ def get_or_create_sheet(service, spreadsheet_id: str, sheet_name: str) -> None:
         f"get_or_create_sheet called with spreadsheet_id={spreadsheet_id}, sheet_name={sheet_name}"
     )
 
-    sheets_metadata = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheets_metadata = safe_get_spreadsheet_metadata(service, spreadsheet_id)
+
     sheet_titles = [s["properties"]["title"] for s in sheets_metadata.get("sheets", [])]
     log.debug(f"Existing sheet titles: {sheet_titles}")
     if sheet_name not in sheet_titles:
@@ -144,7 +166,7 @@ def get_sheet_metadata(service, spreadsheet_id: str):
     log.debug(f"Retrieving spreadsheet metadata for ID={spreadsheet_id}")
     log.debug(f"Fetching spreadsheet metadata for ID={spreadsheet_id}")
     try:
-        metadata = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        metadata = safe_get_spreadsheet_metadata(service, spreadsheet_id)
         log.debug(f"Metadata keys available: {list(metadata.keys())}")
         return metadata
     except HttpError as error:
@@ -224,7 +246,7 @@ def sort_sheet_by_column(
     )
     try:
         # Get sheet ID from metadata
-        metadata = get_sheet_metadata(service, spreadsheet_id)
+        metadata = safe_get_spreadsheet_metadata(service, spreadsheet_id)
         sheet_id = None
         for sheet in metadata.get("sheets", []):
             if sheet["properties"]["title"] == sheet_name:
@@ -271,7 +293,7 @@ def get_sheet_id_by_name(sheet_service, spreadsheet_id: str, sheet_name: str) ->
     """
     Returns the numeric sheet ID of the given sheet name.
     """
-    metadata = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    metadata = safe_get_spreadsheet_metadata(sheet_service, spreadsheet_id)
     for sheet in metadata.get("sheets", []):
         if sheet.get("properties", {}).get("title") == sheet_name:
             return sheet.get("properties", {}).get("sheetId")
@@ -328,10 +350,7 @@ def get_spreadsheet_metadata(sheets_service, spreadsheet_id: str) -> Dict:
     """
     log.debug(f"Retrieving spreadsheet metadata for ID {spreadsheet_id}")
     try:
-        spreadsheet = (
-            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        )
-        return spreadsheet
+        return safe_get_spreadsheet_metadata(sheets_service, spreadsheet_id)
     except HttpError as error:
         log.error(f"An error occurred while retrieving spreadsheet metadata: {error}")
         raise
@@ -429,9 +448,7 @@ def clear_all_except_one_sheet(sheets_service, spreadsheet_id: str, sheet_to_kee
         f"Clearing all sheets except '{sheet_to_keep}' in spreadsheet ID {spreadsheet_id}"
     )
     try:
-        spreadsheet = (
-            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        )
+        spreadsheet = safe_get_spreadsheet_metadata(sheets_service, spreadsheet_id)
         sheets = spreadsheet.get("sheets", [])
         sheet_titles = [sheet["properties"]["title"] for sheet in sheets]
         requests = []
@@ -465,9 +482,7 @@ def clear_sheet(sheets_service, spreadsheet_id, sheet_name):
     )
     try:
         # Get sheetId from sheet name
-        metadata = (
-            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        )
+        metadata = safe_get_spreadsheet_metadata(sheets_service, spreadsheet_id)
         sheet_id = None
         for sheet in metadata["sheets"]:
             if sheet["properties"]["title"] == sheet_name:
@@ -501,9 +516,7 @@ def delete_sheet_by_name(sheets_service, spreadsheet_id: str, sheet_name: str):
         f"Deleting sheet '{sheet_name}' if it exists in spreadsheet_id={spreadsheet_id}"
     )
     try:
-        spreadsheet = (
-            sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        )
+        spreadsheet = safe_get_spreadsheet_metadata(sheets_service, spreadsheet_id)
         sheets = spreadsheet.get("sheets", [])
         if len(sheets) <= 1:
             log.warning(
@@ -532,9 +545,7 @@ def delete_all_sheets_except(sheets_service, spreadsheet_id, sheet_to_keep):
     """
     Deletes all sheets except the one named sheet_to_keep.
     """
-    spreadsheet = (
-        sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    )
+    spreadsheet = safe_get_spreadsheet_metadata(sheets_service, spreadsheet_id)
     sheets = spreadsheet.get("sheets", [])
     requests = []
     for sheet in sheets:
