@@ -3,7 +3,7 @@ import time
 import requests
 import spotipy
 from spotipy import Spotify
-from spotipy.exceptions import SpotifyException
+from spotipy.exceptions import SpotifyException, SpotifyOauthError
 from spotipy.oauth2 import CacheHandler, SpotifyOAuth
 
 from kaiano_common_utils import config
@@ -76,14 +76,39 @@ def get_spotify_client_from_refresh() -> Spotify:
         cache_handler=NoopCacheHandler(),
     )
 
-    try:
-        log.debug("Refreshing Spotify access token...")
-        token_info = auth_manager.refresh_access_token(refresh_token)
-        log.info("Obtained new Spotify access token.")
-        return Spotify(auth=token_info["access_token"])
-    except Exception as e:
-        log.error(f"Failed to refresh token: {e}")
-        raise
+    max_retries = 3
+    base_backoff_seconds = 2
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            log.debug(
+                f"Refreshing Spotify access token (attempt {attempt}/{max_retries})..."
+            )
+            token_info = auth_manager.refresh_access_token(refresh_token)
+            log.info("✅ Obtained new Spotify access token.")
+            return Spotify(auth=token_info["access_token"])
+
+        except (SpotifyOauthError, requests.exceptions.RequestException) as e:
+            log.warning(
+                f"Spotify token refresh failed "
+                f"(attempt {attempt}/{max_retries}): {e}"
+            )
+
+            if attempt < max_retries:
+                sleep_for = base_backoff_seconds * attempt
+                log.info(f"Retrying Spotify token refresh in {sleep_for} seconds...")
+                time.sleep(sleep_for)
+                continue
+
+            log.error("❌ Exceeded maximum retries while refreshing Spotify token.")
+            raise
+
+        except Exception as e:
+            log.error(
+                f"❌ Unexpected error while refreshing Spotify token: {e}",
+                exc_info=True,
+            )
+            raise
 
 
 def search_track(artist: str, title: str) -> str | None:
