@@ -102,7 +102,7 @@ def write_sheet(service, spreadsheet_id, range_name, values=None):
             .update(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
-                valueInputOption="USER_ENTERED",
+                valueInputOption="RAW",
                 body=body,
             )
             .execute()
@@ -129,7 +129,7 @@ def append_rows(service, spreadsheet_id: str, range_name: str, values: list) -> 
             .append(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
-                valueInputOption="USER_ENTERED",
+                valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body=body,
             )
@@ -402,7 +402,7 @@ def write_sheet_data(
         sheet_service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=f"{sheet_name}!A1",
-            valueInputOption="USER_ENTERED",
+            valueInputOption="RAW",
             body=body,
         ).execute()
         log.debug(f"Sheet '{sheet_name}' written successfully")
