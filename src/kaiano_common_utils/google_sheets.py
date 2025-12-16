@@ -1,3 +1,5 @@
+import random
+import time
 from typing import Any, Dict, List
 
 from googleapiclient.errors import HttpError
@@ -411,32 +413,84 @@ def write_sheet_data(
         raise
 
 
-def get_sheet_values(sheets_service, spreadsheet_id, sheet_name):
+def get_sheet_values(
+    sheets_service,
+    spreadsheet_id,
+    sheet_name,
+    max_retries: int = 8,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+):
     """
     Get all values from the given sheet.
+
     Returns a list of rows (each row is a list of strings).
+
+    Retries on transient API errors (429, 500, 503) and quota-related 403s using
+    exponential backoff with jitter.
     """
     range_name = f"{sheet_name}"
     log.debug(
         f"Getting all values from sheet '{sheet_name}' in spreadsheet_id={spreadsheet_id}"
     )
-    try:
-        result = (
-            sheets_service.spreadsheets()
-            .values()
-            .get(spreadsheetId=spreadsheet_id, range=range_name, majorDimension="ROWS")
-            .execute()
-        )
-        values = result.get("values", [])
-        log.debug(f"Retrieved {len(values)} rows from sheet '{sheet_name}'")
-        # Normalize all values to strings
-        normalized = []
-        for row in values:
-            normalized.append([str(cell) if cell is not None else "" for cell in row])
-        return normalized
-    except HttpError as error:
-        log.error(f"An error occurred while getting sheet values: {error}")
-        raise
+
+    delay = base_delay
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = (
+                sheets_service.spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    majorDimension="ROWS",
+                )
+                .execute()
+            )
+            values = result.get("values", [])
+            log.debug(f"Retrieved {len(values)} rows from sheet '{sheet_name}'")
+
+            # Normalize all values to strings
+            normalized: list[list[str]] = []
+            for row in values:
+                normalized.append(
+                    [str(cell) if cell is not None else "" for cell in row]
+                )
+            return normalized
+
+        except HttpError as error:
+            last_error = error
+            status = getattr(getattr(error, "resp", None), "status", None)
+            msg = str(error).lower()
+
+            retryable = status in (429, 500, 503) or (status == 403 and "quota" in msg)
+            if not retryable or attempt == max_retries:
+                log.error(
+                    f"An error occurred while getting sheet values (attempt {attempt}/{max_retries}): {error}"
+                )
+                raise
+
+            # exponential backoff with jitter (0.7x–1.3x)
+            wait = min(max_delay, delay) * (0.7 + random.random() * 0.6)
+            log.warning(
+                f"⚠️ Retryable Sheets API error {status} while reading '{sheet_name}' ({spreadsheet_id}); "
+                f"retrying in {wait:.1f}s (attempt {attempt}/{max_retries})"
+            )
+            time.sleep(wait)
+            delay *= 2
+
+        except Exception as error:
+            # Non-HTTP errors: do not retry endlessly
+            last_error = error
+            log.error(f"An error occurred while getting sheet values: {error}")
+            raise
+
+    # Should be unreachable, but keep a defensive raise
+    if last_error:
+        raise last_error
+    return []
 
 
 def clear_all_except_one_sheet(sheets_service, spreadsheet_id: str, sheet_to_keep: str):
