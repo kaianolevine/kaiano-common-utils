@@ -299,13 +299,30 @@ def download_file(service, file_id, destination_path):
     log.debug(f"Total chunks downloaded: {chunk_count}")
 
 
-def upload_file(service, filepath, folder_id):
-    log.debug(f"Filepath: {filepath}, Folder ID: {folder_id}")
-    file_metadata = {"name": os.path.basename(filepath), "parents": [folder_id]}
+def upload_file(service, filepath, folder_id, dest_name: str | None = None) -> str:
+    """
+    Uploads a file to Google Drive into the given folder_id.
+
+    By default, the uploaded Drive file name is the basename of filepath. If dest_name
+    is provided, that name is used instead (useful when the local temp filename includes
+    prefixes like a Drive file ID).
+
+    Returns the uploaded Drive file ID.
+    """
+    upload_name = dest_name or os.path.basename(filepath)
+    log.debug(f"Filepath: {filepath}, Folder ID: {folder_id}, Dest Name: {upload_name}")
+
+    file_metadata = {"name": upload_name, "parents": [folder_id]}
     media = MediaFileUpload(filepath, resumable=True)
-    service.files().create(
-        body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
-    ).execute()
+
+    uploaded = (
+        service.files()
+        .create(
+            body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
+        )
+        .execute()
+    )
+    return uploaded["id"]
 
 
 def upload_to_drive(drive, filepath, parent_id):
