@@ -315,14 +315,9 @@ def upload_file(service, filepath, folder_id, dest_name: str | None = None) -> s
     file_metadata = {"name": upload_name, "parents": [folder_id]}
     media = MediaFileUpload(filepath, resumable=True)
 
-    uploaded = (
-        service.files()
-        .create(
-            body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
-        )
-        .execute()
-    )
-    return uploaded["id"]
+    service.files().create(
+        body=file_metadata, media_body=media, fields="id", supportsAllDrives=True
+    ).execute()
 
 
 def upload_to_drive(drive, filepath, parent_id):
