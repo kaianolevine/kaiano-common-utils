@@ -311,6 +311,31 @@ def apply_formatting_to_sheet(spreadsheet_id):
         log.error(f"Error applying formatting to sheets: {e}")
 
 
+# --- Helper function for preparing cell values for user entry ---
+def _prepare_cell_for_user_entered(cell: Any, *, force_text: bool) -> Any:
+    """Prepare a cell for Sheets values.update.
+
+    When `force_text=True`, we prefix strings with an apostrophe to prevent Sheets
+    auto-parsing (dates, numbers, etc.). HOWEVER, doing so will break formulas,
+    including `=HYPERLINK(...)` cells.
+
+    So we preserve formulas by detecting strings that start with '=' and leaving
+    them untouched.
+    """
+    if cell is None:
+        return "" if force_text else ""
+
+    # Preserve formulas (including =HYPERLINK(...))
+    if isinstance(cell, str) and cell.startswith("="):
+        return cell
+
+    if not force_text:
+        return cell
+
+    # Force literal text (USER_ENTERED) by prefixing with apostrophe.
+    return f"'{str(cell)}"
+
+
 def set_values(
     sheets_service,
     spreadsheet_id,
@@ -327,11 +352,16 @@ def set_values(
     end_col = start_col + len(values[0]) - 1 if values else start_col
     range_name = f"{sheet_name}!R{start_row}C{start_col}:R{end_row}C{end_col}"
     if force_text:
-        # Prefix with apostrophe to ensure USER_ENTERED treats as literal text
-        prepared = [[f"'{str(cell)}" for cell in row] for row in values]
+        prepared = [
+            [_prepare_cell_for_user_entered(cell, force_text=True) for cell in row]
+            for row in values
+        ]
         value_input = "USER_ENTERED"
     else:
-        prepared = values
+        prepared = [
+            [_prepare_cell_for_user_entered(cell, force_text=False) for cell in row]
+            for row in values
+        ]
         value_input = "RAW"
     body = {"values": prepared}
     sheets_service.spreadsheets().values().update(
