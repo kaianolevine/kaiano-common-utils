@@ -67,6 +67,43 @@ def _batch_update_with_retry(
         raise last_err
 
 
+# --- Helper: get column pixel sizes for all sheets in a spreadsheet ---
+def _get_column_pixel_sizes(
+    sheets_service,
+    spreadsheet_id: str,
+) -> Dict[int, List[Optional[int]]]:
+    """Return {sheetId: [pixelSize,...]} using a minimal includeGridData fetch.
+
+    We keep fields tight to avoid large payloads.
+    """
+    meta = (
+        sheets_service.spreadsheets()
+        .get(
+            spreadsheetId=spreadsheet_id,
+            includeGridData=True,
+            fields="sheets(properties(sheetId,title),data(columnMetadata(pixelSize)))",
+        )
+        .execute()
+    )
+
+    out: Dict[int, List[Optional[int]]] = {}
+    for s in meta.get("sheets", []):
+        props = s.get("properties", {})
+        sid = props.get("sheetId")
+        data = s.get("data", []) or []
+        if not sid or not data:
+            continue
+        # data[0] is typically the main GridData
+        col_meta = (data[0] or {}).get("columnMetadata", []) or []
+        sizes: List[Optional[int]] = []
+        for cm in col_meta:
+            ps = cm.get("pixelSize")
+            sizes.append(int(ps) if ps is not None else None)
+        out[int(sid)] = sizes
+
+    return out
+
+
 def apply_sheet_formatting(sheet):
     """Apply lightweight formatting to a gspread Worksheet with minimal API calls.
 
@@ -309,6 +346,88 @@ def apply_formatting_to_sheet(spreadsheet_id):
                     import time
 
                     time.sleep(0.5)
+
+        # --- Column width buffer pass ---
+        # Auto-resize sets widths, but can be a little tight. We re-fetch the computed
+        # widths and then apply a small pixel buffer, capped at a max width.
+        BUFFER_PX = 20
+        MAX_PX = 350
+
+        try:
+            pixel_sizes_by_sheet = _get_column_pixel_sizes(
+                sheets_service, spreadsheet_id
+            )
+
+            width_requests: List[Dict[str, Any]] = []
+
+            for s in sheets:
+                props = s.get("properties", {})
+                sheet_id = int(props.get("sheetId"))
+                grid = props.get("gridProperties", {})
+                num_columns = int(grid.get("columnCount", 26) or 26)
+                if num_columns < 1:
+                    num_columns = 26
+
+                sizes = pixel_sizes_by_sheet.get(sheet_id, [])
+                if not sizes:
+                    continue
+
+                # Build per-column updates only where we have a size.
+                for col_idx in range(0, min(num_columns, len(sizes))):
+                    ps = sizes[col_idx]
+                    if ps is None:
+                        continue
+
+                    new_ps = min(int(ps) + BUFFER_PX, MAX_PX)
+                    # If already wide enough, no need to write.
+                    if new_ps <= int(ps):
+                        continue
+
+                    width_requests.append(
+                        {
+                            "updateDimensionProperties": {
+                                "range": {
+                                    "sheetId": sheet_id,
+                                    "dimension": "COLUMNS",
+                                    "startIndex": col_idx,
+                                    "endIndex": col_idx + 1,
+                                },
+                                "properties": {"pixelSize": new_ps},
+                                "fields": "pixelSize",
+                            }
+                        }
+                    )
+
+            if width_requests:
+                # Chunk dimension updates too.
+                WIDTH_CHUNK_SIZE = 500
+                log.debug(
+                    f"Applying column width buffer (+{BUFFER_PX}px, cap {MAX_PX}px). Total width updates: {len(width_requests)}"
+                )
+
+                for i in range(0, len(width_requests), WIDTH_CHUNK_SIZE):
+                    chunk = width_requests[i : i + WIDTH_CHUNK_SIZE]
+                    chunk_num = (i // WIDTH_CHUNK_SIZE) + 1
+                    total_chunks = ((len(width_requests) - 1) // WIDTH_CHUNK_SIZE) + 1
+
+                    _batch_update_with_retry(
+                        sheets_service,
+                        spreadsheet_id,
+                        chunk,
+                        operation=f"column width buffer (chunk {chunk_num}/{total_chunks})",
+                        max_attempts=5,
+                    )
+
+                    if chunk_num < total_chunks:
+                        try:
+                            helpers.sleep(0.5)
+                        except Exception:
+                            import time
+
+                            time.sleep(0.5)
+
+        except Exception as e:
+            log.warning(f"Column width buffer pass failed (continuing without it): {e}")
 
         log.info("✅ Formatting applied successfully to all sheets")
     except Exception as e:
