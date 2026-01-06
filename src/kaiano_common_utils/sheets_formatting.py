@@ -102,7 +102,9 @@ def apply_sheet_formatting(sheet):
             }
         )
 
-        # Font size + left alignment for the used column range (avoid formatting whole A:Z via gspread)
+        # Font size + left alignment across used columns.
+        # IMPORTANT: Do NOT set/replace the entire textFormat object, because that can wipe
+        # rich-text hyperlink info (textFormat.link / textFormatRuns). Only set fontSize.
         requests.append(
             {
                 "repeatCell": {
@@ -118,7 +120,7 @@ def apply_sheet_formatting(sheet):
                             "horizontalAlignment": "LEFT",
                         }
                     },
-                    "fields": "userEnteredFormat(textFormat,horizontalAlignment)",
+                    "fields": "userEnteredFormat.textFormat.fontSize,userEnteredFormat.horizontalAlignment",
                 }
             }
         )
@@ -220,7 +222,9 @@ def apply_formatting_to_sheet(spreadsheet_id):
                 }
             )
 
-            # Font size + left alignment across used columns
+            # Font size + left alignment across used columns.
+            # IMPORTANT: Do NOT set/replace the entire textFormat object, because that can wipe
+            # rich-text hyperlink info (textFormat.link / textFormatRuns). Only set fontSize.
             all_requests.append(
                 {
                     "repeatCell": {
@@ -236,7 +240,7 @@ def apply_formatting_to_sheet(spreadsheet_id):
                                 "horizontalAlignment": "LEFT",
                             }
                         },
-                        "fields": "userEnteredFormat(textFormat,horizontalAlignment)",
+                        "fields": "userEnteredFormat.textFormat.fontSize,userEnteredFormat.horizontalAlignment",
                     }
                 }
             )
