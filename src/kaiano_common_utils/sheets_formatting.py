@@ -6,66 +6,305 @@ from kaiano_common_utils import google_sheets, helpers
 from kaiano_common_utils import logger as log
 
 
-def apply_sheet_formatting(sheet):
-    # Set font size and alignment for entire sheet
-    sheet.format("A:Z", {"textFormat": {"fontSize": 10}, "horizontalAlignment": "LEFT"})
-
-    # Freeze header row
-    sheet.freeze(rows=1)
-
-    # Bold the header row
-    sheet.format("1:1", {"textFormat": {"bold": True}})
-
-    # --- Auto-resize all columns, then add a buffer to their width using Google Sheets API ---
+# --- Helper functions for quota-friendly, robust formatting ---
+def _http_status(err: Exception) -> Optional[int]:
+    """Best-effort extraction of HTTP status code from googleapiclient HttpError."""
     try:
-        # Get spreadsheet and sheet info
+        if isinstance(err, HttpError) and getattr(err, "resp", None) is not None:
+            return int(getattr(err.resp, "status", 0))
+    except Exception:
+        return None
+    return None
+
+
+def _is_retryable_http_error(err: Exception) -> bool:
+    """Return True for transient/retryable Google API errors."""
+    status = _http_status(err)
+    return status in {429, 500, 502, 503, 504}
+
+
+def _batch_update_with_retry(
+    sheets_service,
+    spreadsheet_id: str,
+    requests: List[Dict[str, Any]],
+    *,
+    operation: str = "batchUpdate",
+    max_attempts: int = 5,
+) -> None:
+    """Execute a Sheets batchUpdate with conservative exponential backoff.
+
+    Formatting tends to be quota-heavy and can trigger 429 (rate limit) or 5xx.
+    This wrapper retries only for transient statuses.
+    """
+    delay_s = 1.0
+    last_err: Optional[Exception] = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id, body={"requests": requests}
+            ).execute()
+            return
+        except Exception as e:
+            last_err = e
+            if not _is_retryable_http_error(e) or attempt >= max_attempts:
+                raise
+
+            status = _http_status(e)
+            log.warning(
+                f"⚠️ {operation} hit retryable error (HTTP {status}) on attempt {attempt}/{max_attempts}. "
+                f"Backing off for {delay_s:.1f}s..."
+            )
+            try:
+                helpers.sleep(delay_s)  # if helpers exposes sleep
+            except Exception:
+                import time
+
+                time.sleep(delay_s)
+            delay_s = min(delay_s * 2, 16.0)
+
+    if last_err:
+        raise last_err
+
+
+def apply_sheet_formatting(sheet):
+    """Apply lightweight formatting to a gspread Worksheet with minimal API calls.
+
+    NOTE: We avoid gspread's `sheet.format()` and `sheet.freeze()` calls because
+    they each translate into additional Sheets API requests per sheet.
+
+    This function now uses a single Sheets API `batchUpdate` request per sheet
+    (plus one metadata fetch when called via `apply_formatting_to_sheet`).
+    """
+    try:
         spreadsheet_id = sheet.spreadsheet.id
         sheet_id = sheet.id
         sheets_service = google_sheets.get_sheets_service()
 
-        # Determine number of columns (by checking first row's length)
-        values = sheet.get_all_values()
-        if values and len(values) > 0:
-            num_columns = len(values[0])
-        else:
-            num_columns = 26  # fallback default to 26 columns (A-Z)
+        # Use metadata-provided column count instead of reading values (saves quota).
+        # gspread Worksheet exposes `col_count` which is backed by sheet properties.
+        num_columns = int(getattr(sheet, "col_count", 26) or 26)
+        if num_columns < 1:
+            num_columns = 26
 
-        # 1. Auto-resize all columns
-        auto_resize_req = {
-            "autoResizeDimensions": {
-                "dimensions": {
-                    "sheetId": sheet_id,
-                    "dimension": "COLUMNS",
-                    "startIndex": 0,
-                    "endIndex": num_columns,
+        requests: List[Dict[str, Any]] = []
+
+        # Freeze header row
+        requests.append(
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": sheet_id,
+                        "gridProperties": {"frozenRowCount": 1},
+                    },
+                    "fields": "gridProperties.frozenRowCount",
                 }
             }
-        }
-        # Send both requests (auto-resize, then buffer)
-        sheets_service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id,
-            body={"requests": [auto_resize_req]},
-        ).execute()
+        )
+
+        # Font size + left alignment for the used column range (avoid formatting whole A:Z via gspread)
+        requests.append(
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": num_columns,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "textFormat": {"fontSize": 10},
+                            "horizontalAlignment": "LEFT",
+                        }
+                    },
+                    "fields": "userEnteredFormat(textFormat,horizontalAlignment)",
+                }
+            }
+        )
+
+        # Bold the header row
+        requests.append(
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": num_columns,
+                    },
+                    "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                    "fields": "userEnteredFormat.textFormat.bold",
+                }
+            }
+        )
+
+        # Auto-resize only the columns we expect to be used
+        requests.append(
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": num_columns,
+                    }
+                }
+            }
+        )
+
+        _batch_update_with_retry(
+            sheets_service,
+            spreadsheet_id,
+            requests,
+            operation=f"format sheetId={sheet_id}",
+            max_attempts=5,
+        )
     except Exception as e:
-        log.warning(f"Auto-resize and buffer for columns failed: {e}")
+        log.warning(
+            f"Auto formatting failed for sheet '{getattr(sheet, 'title', sheet)}': {e}"
+        )
 
 
 def apply_formatting_to_sheet(spreadsheet_id):
+    """Apply formatting to all sheets in a spreadsheet with quota-friendly batching.
+
+    We currently may have ~12 sheets, but this can grow over time. The safest approach
+    is to:
+    - Fetch spreadsheet metadata once
+    - Build a single list of batchUpdate requests for ALL sheets
+    - Send those requests in CHUNKS to avoid very large batchUpdate payloads
+
+    This reduces the number of *HTTP requests* significantly (often to 1–2 calls),
+    which helps with per-minute quotas and rate limiting.
+
+    NOTE: We intentionally do NOT read any cell values here.
+    """
+
     log.debug(f"Applying formatting to all sheets in spreadsheet ID: {spreadsheet_id}")
+
+    sheets_service = google_sheets.get_sheets_service()
+
     try:
-        gc = google_sheets.get_gspread_client()
-        sh = gc.open_by_key(spreadsheet_id)
-        worksheets = sh.worksheets()
-        log.debug(f"Found {len(worksheets)} sheet(s) to format")
+        meta = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        sheets = meta.get("sheets", [])
+        log.debug(f"Found {len(sheets)} sheet(s) to format")
 
-        for sheet in worksheets:
-            log.debug(f"Formatting sheet: {sheet.title}")
-            values = sheet.get_all_values()
-            if not values or len(values) == 0 or len(values[0]) == 0:
-                log.warning(f"Sheet '{sheet.title}' is empty, skipping formatting")
-                continue
+        # Build ONE request list for all sheets, then chunk it.
+        all_requests: List[Dict[str, Any]] = []
 
-            apply_sheet_formatting(sheet)
+        for s in sheets:
+            props = s.get("properties", {})
+            sheet_id = props.get("sheetId")
+            title = props.get("title", "(untitled)")
+            grid = props.get("gridProperties", {})
+            num_columns = int(grid.get("columnCount", 26) or 26)
+            if num_columns < 1:
+                num_columns = 26
+
+            log.debug(
+                f"Queueing formatting for sheet: {title} (sheetId={sheet_id}, cols={num_columns})"
+            )
+
+            # Freeze header row
+            all_requests.append(
+                {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": sheet_id,
+                            "gridProperties": {"frozenRowCount": 1},
+                        },
+                        "fields": "gridProperties.frozenRowCount",
+                    }
+                }
+            )
+
+            # Font size + left alignment across used columns
+            all_requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 0,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": num_columns,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "textFormat": {"fontSize": 10},
+                                "horizontalAlignment": "LEFT",
+                            }
+                        },
+                        "fields": "userEnteredFormat(textFormat,horizontalAlignment)",
+                    }
+                }
+            )
+
+            # Bold header row
+            all_requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 0,
+                            "endRowIndex": 1,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": num_columns,
+                        },
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold",
+                    }
+                }
+            )
+
+            # Auto-resize columns
+            all_requests.append(
+                {
+                    "autoResizeDimensions": {
+                        "dimensions": {
+                            "sheetId": sheet_id,
+                            "dimension": "COLUMNS",
+                            "startIndex": 0,
+                            "endIndex": num_columns,
+                        }
+                    }
+                }
+            )
+
+        if not all_requests:
+            log.info("No sheets found to format; nothing to do")
+            return
+
+        # Chunk the requests to keep payloads reasonable and avoid API limits.
+        # Each sheet contributes 4 requests, so CHUNK_SIZE=400 formats ~100 sheets per call.
+        CHUNK_SIZE = 400
+
+        log.debug(
+            f"Sending formatting batchUpdate requests in chunks of {CHUNK_SIZE}. Total requests: {len(all_requests)}"
+        )
+
+        for i in range(0, len(all_requests), CHUNK_SIZE):
+            chunk = all_requests[i : i + CHUNK_SIZE]
+            chunk_num = (i // CHUNK_SIZE) + 1
+            total_chunks = ((len(all_requests) - 1) // CHUNK_SIZE) + 1
+
+            _batch_update_with_retry(
+                sheets_service,
+                spreadsheet_id,
+                chunk,
+                operation=f"format all sheets (chunk {chunk_num}/{total_chunks})",
+                max_attempts=5,
+            )
+
+            # Light throttle between chunks (helps when spreadsheets grow large)
+            if chunk_num < total_chunks:
+                try:
+                    helpers.sleep(0.5)
+                except Exception:
+                    import time
+
+                    time.sleep(0.5)
 
         log.info("✅ Formatting applied successfully to all sheets")
     except Exception as e:
