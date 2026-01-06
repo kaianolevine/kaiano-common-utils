@@ -10,6 +10,42 @@ from kaiano_common_utils import logger as log
 log = log.get_logger()
 
 
+# Helper functions for retryable Sheets API operations
+def _is_retryable_http_error(error: HttpError) -> bool:
+    status = getattr(getattr(error, "resp", None), "status", None)
+    msg = str(error).lower()
+
+    # Retry on transient / server-side failures
+    if isinstance(status, int) and 500 <= status <= 599:
+        return True
+
+    # Too many requests
+    if status == 429:
+        return True
+
+    # Some quota errors come back as 403 with a quota-related message
+    if status == 403 and "quota" in msg:
+        return True
+
+    return False
+
+
+def _sleep_with_backoff(
+    *,
+    attempt: int,
+    delay: float,
+    max_delay: float,
+    context: str,
+):
+    # exponential backoff with jitter (0.7x–1.3x)
+    wait = min(max_delay, delay) * (0.7 + random.random() * 0.6)
+    log.warning(
+        f"⚠️ Retryable Sheets API error while {context}; retrying in {wait:.1f}s (attempt {attempt})"
+    )
+    time.sleep(wait)
+    return wait
+
+
 # Helper for safe spreadsheet metadata retrieval with retries
 def safe_get_spreadsheet_metadata(
     service, spreadsheet_id: str, max_retries: int = 3
@@ -26,8 +62,6 @@ def safe_get_spreadsheet_metadata(
             )
             if attempt == max_retries - 1:
                 raise
-            import time
-
             time.sleep(2**attempt)
 
 
@@ -61,29 +95,72 @@ def get_or_create_sheet(service, spreadsheet_id: str, sheet_name: str) -> None:
         log.debug(f"Sheet '{sheet_name}' already exists; no creation needed.")
 
 
-def read_sheet(service, spreadsheet_id, range_name):
+def read_sheet(
+    service,
+    spreadsheet_id: str,
+    range_name: str,
+    max_retries: int = 8,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+):
     log.debug(
         f"Reading sheet data from spreadsheet_id={spreadsheet_id}, range_name={range_name}"
     )
-    log.debug(
-        f"Calling Sheets API with spreadsheetId={spreadsheet_id}, range={range_name}"
-    )
-    try:
-        result = (
-            service.spreadsheets()
-            .values()
-            .get(spreadsheetId=spreadsheet_id, range=range_name)
-            .execute()
-        )
-        values = result.get("values", [])
-        log.debug(f"Sheets API returned {len(values)} rows")
-        return values
-    except HttpError as error:
-        log.error(f"An error occurred while reading sheet: {error}")
-        raise
+
+    delay = base_delay
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = (
+                service.spreadsheets()
+                .values()
+                .get(spreadsheetId=spreadsheet_id, range=range_name)
+                .execute()
+            )
+            values = result.get("values", [])
+            log.debug(f"Sheets API returned {len(values)} rows")
+            return values
+
+        except HttpError as error:
+            last_error = error
+            status = getattr(getattr(error, "resp", None), "status", None)
+
+            if (not _is_retryable_http_error(error)) or attempt == max_retries:
+                log.error(
+                    f"An error occurred while reading sheet (attempt {attempt}/{max_retries}): {error}"
+                )
+                raise
+
+            # exponential backoff with jitter (0.7x–1.3x)
+            wait = min(max_delay, delay) * (0.7 + random.random() * 0.6)
+            log.warning(
+                f"⚠️ Retryable Sheets API error {status} while reading range '{range_name}' "
+                f"({spreadsheet_id}); retrying in {wait:.1f}s (attempt {attempt}/{max_retries})"
+            )
+            time.sleep(wait)
+            delay *= 2
+
+        except Exception as error:
+            last_error = error
+            log.error(f"An error occurred while reading sheet: {error}")
+            raise
+
+    # Defensive: should be unreachable
+    if last_error:
+        raise last_error
+    return []
 
 
-def write_sheet(service, spreadsheet_id, range_name, values=None):
+def write_sheet(
+    service,
+    spreadsheet_id,
+    range_name,
+    values=None,
+    max_retries: int = 8,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+):
     log.debug(
         f"Writing data to sheet: spreadsheet_id={spreadsheet_id}, range_name={range_name}, number of rows={len(values) if values else 0}"
     )
@@ -97,51 +174,113 @@ def write_sheet(service, spreadsheet_id, range_name, values=None):
         f"Calling Sheets API with spreadsheetId={spreadsheet_id}, range={range_name}"
     )
     body = {"values": values}
-    try:
-        result = (
-            service.spreadsheets()
-            .values()
-            .update(
-                spreadsheetId=spreadsheet_id,
-                range=range_name,
-                valueInputOption="RAW",
-                body=body,
+
+    delay = base_delay
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = (
+                service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    valueInputOption="RAW",
+                    body=body,
+                )
+                .execute()
             )
-            .execute()
-        )
-        log.debug(
-            f"write_sheet updated range {range_name} with {len(values) if values else 0} rows"
-        )
-        return result
-    except HttpError as error:
-        log.error(f"An error occurred while writing to sheet: {error}")
-        raise
+            log.debug(
+                f"write_sheet updated range {range_name} with {len(values) if values else 0} rows"
+            )
+            return result
+
+        except HttpError as error:
+            last_error = error
+            if (not _is_retryable_http_error(error)) or attempt == max_retries:
+                log.error(
+                    f"An error occurred while writing to sheet (attempt {attempt}/{max_retries}): {error}"
+                )
+                raise
+
+            _sleep_with_backoff(
+                attempt=attempt,
+                delay=delay,
+                max_delay=max_delay,
+                context=f"writing range '{range_name}' ({spreadsheet_id})",
+            )
+            delay *= 2
+
+        except Exception as error:
+            last_error = error
+            log.error(f"An error occurred while writing to sheet: {error}")
+            raise
+
+    if last_error:
+        raise last_error
+    return None
 
 
-def append_rows(service, spreadsheet_id: str, range_name: str, values: list) -> None:
+def append_rows(
+    service,
+    spreadsheet_id: str,
+    range_name: str,
+    values: list,
+    max_retries: int = 8,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+) -> None:
     log.debug(
         f"Appending {len(values)} rows to spreadsheet_id={spreadsheet_id}, range_name={range_name}"
     )
     body = {"values": values}
     log.debug("Calling Sheets API to append rows...")
-    try:
-        result = (
-            service.spreadsheets()
-            .values()
-            .append(
-                spreadsheetId=spreadsheet_id,
-                range=range_name,
-                valueInputOption="RAW",
-                insertDataOption="INSERT_ROWS",
-                body=body,
+
+    delay = base_delay
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = (
+                service.spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    valueInputOption="RAW",
+                    insertDataOption="INSERT_ROWS",
+                    body=body,
+                )
+                .execute()
             )
-            .execute()
-        )
-        log.debug(f"Appended {len(values)} rows to {range_name}")
-        return result
-    except HttpError as error:
-        log.error(f"An error occurred while appending rows: {error}")
-        raise
+            log.debug(f"Appended {len(values)} rows to {range_name}")
+            return result
+
+        except HttpError as error:
+            last_error = error
+            if (not _is_retryable_http_error(error)) or attempt == max_retries:
+                log.error(
+                    f"An error occurred while appending rows (attempt {attempt}/{max_retries}): {error}"
+                )
+                raise
+
+            _sleep_with_backoff(
+                attempt=attempt,
+                delay=delay,
+                max_delay=max_delay,
+                context=f"appending to range '{range_name}' ({spreadsheet_id})",
+            )
+            delay *= 2
+
+        except Exception as error:
+            last_error = error
+            log.error(f"An error occurred while appending rows: {error}")
+            raise
+
+    if last_error:
+        raise last_error
+    return None
 
 
 # Ensure all required sheet tabs exist in a spreadsheet
@@ -198,23 +337,54 @@ def update_row(spreadsheet_id: str, range_: str, values: list[list[str]]):
     )
     log.debug(f"Values to update: {values}")
     body = {"values": values}
-    try:
-        result = (
-            service.spreadsheets()
-            .values()
-            .update(
-                spreadsheetId=spreadsheet_id,
-                range=range_,
-                valueInputOption="USER_ENTERED",
-                body=body,
+
+    delay = 1.0
+    max_retries = 8
+    max_delay = 60.0
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = (
+                service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_,
+                    valueInputOption="USER_ENTERED",
+                    body=body,
+                )
+                .execute()
             )
-            .execute()
-        )
-        log.debug(f"Row updated in range {range_} in spreadsheet_id={spreadsheet_id}")
-        return result
-    except HttpError as error:
-        log.error(f"An error occurred while updating row: {error}")
-        raise
+            log.debug(
+                f"Row updated in range {range_} in spreadsheet_id={spreadsheet_id}"
+            )
+            return result
+
+        except HttpError as error:
+            last_error = error
+            if (not _is_retryable_http_error(error)) or attempt == max_retries:
+                log.error(
+                    f"An error occurred while updating row (attempt {attempt}/{max_retries}): {error}"
+                )
+                raise
+
+            _sleep_with_backoff(
+                attempt=attempt,
+                delay=delay,
+                max_delay=max_delay,
+                context=f"updating range '{range_}' ({spreadsheet_id})",
+            )
+            delay *= 2
+
+        except Exception as error:
+            last_error = error
+            log.error(f"An error occurred while updating row: {error}")
+            raise
+
+    if last_error:
+        raise last_error
+    return None
 
 
 def sort_sheet_by_column(
@@ -463,10 +633,8 @@ def get_sheet_values(
         except HttpError as error:
             last_error = error
             status = getattr(getattr(error, "resp", None), "status", None)
-            msg = str(error).lower()
 
-            retryable = status in (429, 500, 503) or (status == 403 and "quota" in msg)
-            if not retryable or attempt == max_retries:
+            if (not _is_retryable_http_error(error)) or attempt == max_retries:
                 log.error(
                     f"An error occurred while getting sheet values (attempt {attempt}/{max_retries}): {error}"
                 )
