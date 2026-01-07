@@ -65,6 +65,62 @@ def get_most_recent_m3u_file(drive_service):
     return recent_file
 
 
+def get_all_m3u_files(drive_service):
+    """Return all VirtualDJ history .m3u files (newest-first).
+
+    Returns a list of Drive file dicts containing at least: {id, name}.
+
+    Sorting is by filename. With date-prefixed filenames (YYYY-MM-DD.m3u), this
+    yields correct chronological order.
+    """
+
+    if not getattr(config, "VDJ_HISTORY_FOLDER_ID", None):
+        log.critical("VDJ_HISTORY_FOLDER_ID is not set in config.")
+        return []
+
+    log.info(
+        f"Fetching all .m3u files from Drive folder ID: {config.VDJ_HISTORY_FOLDER_ID}"
+    )
+
+    files: list[dict] = []
+    page_token = None
+
+    while True:
+        results = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"'{config.VDJ_HISTORY_FOLDER_ID}' in parents "
+                    "and name contains '.m3u' "
+                    "and trashed = false"
+                ),
+                fields="nextPageToken, files(id, name)",
+                pageToken=page_token,
+            )
+            .execute()
+        )
+
+        batch = results.get("files", []) or []
+        files.extend(batch)
+
+        page_token = results.get("nextPageToken")
+        if not page_token:
+            break
+
+    log.info(f"Number of .m3u files found: {len(files)}")
+    if files:
+        file_names = [f.get("name", "") for f in files]
+        log.debug(f"Files found: {file_names}")
+
+    if not files:
+        log.warning("No .m3u files found in Drive folder.")
+        return []
+
+    # Oldest -> newest by filename, then reverse to newest-first.
+    files.sort(key=lambda f: f.get("name", ""))
+    return list(reversed(files))
+
+
 def download_m3u_file(drive_service, file_id):
     log.debug(f"Starting download of .m3u file with ID: {file_id}")
     try:
