@@ -91,9 +91,53 @@ def parse_m3u_lines(lines, existing_keys, file_date_str):
     log.debug(f"Total lines received for parsing: {len(lines)}")
     tz = pytz.timezone(config.TIMEZONE)
     year, month, day = map(int, file_date_str.split("-"))
-    current_date = datetime.datetime(year, month, day, tzinfo=tz)
-    prev_minutes = -1
+
+    # Base date (midnight) for the history file's date.
+    base_date = tz.localize(datetime.datetime(year, month, day, 0, 0))
+
+    # We will assign a strictly increasing datetime for each entry to preserve file order.
+    prev_assigned_dt = None
+    day_offset = 0
+
     entries = []
+
+    def _parse_last_play_datetime(last_play_str: str):
+        """Best-effort parse of VirtualDJ <lastplaytime> into a tz-aware datetime.
+
+        VirtualDJ history formats vary; this tries a few common representations and returns None if unknown.
+        """
+        if not last_play_str:
+            return None
+
+        s = str(last_play_str).strip()
+        if not s:
+            return None
+
+        # Epoch seconds / milliseconds
+        if s.isdigit():
+            try:
+                n = int(s)
+                if n > 10_000_000_000:  # likely ms
+                    n = n / 1000.0
+                dt = datetime.datetime.fromtimestamp(n, tz)
+                return dt
+            except Exception:
+                return None
+
+        # Common string formats
+        for fmt in (
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+            "%m/%d/%Y %H:%M",
+            "%m/%d/%Y %H:%M:%S",
+        ):
+            try:
+                dt_naive = datetime.datetime.strptime(s, fmt)
+                return tz.localize(dt_naive)
+            except Exception:
+                continue
+
+        return None
 
     for line in lines:
         if line.strip().lower().startswith("#extvdj:"):
@@ -106,31 +150,59 @@ def parse_m3u_lines(lines, existing_keys, file_date_str):
                 f"Extracted tags - time: '{time}', title: '{title}', artist: '{artist}', length: '{length}', lastplay: '{last_play}'"
             )
 
-            if time and title:
-                current_minutes = parse_time_str(time)
-                if prev_minutes > -1 and current_minutes < prev_minutes:
-                    log.debug(
-                        f"Day rollover detected: previous minutes {prev_minutes}, current minutes {current_minutes}"
-                    )
-                    current_date += datetime.timedelta(days=1)
-                prev_minutes = current_minutes
+            if not title:
+                log.warning(f"Missing title in line (skipping): {line.strip()}")
+                continue
 
-                full_dt = f"{current_date.strftime('%Y-%m-%d')} {time.strip()}"
-                key = "||".join(v.strip().lower() for v in [full_dt, title, artist])
-                if key not in existing_keys:
-                    entries.append(
-                        [
-                            full_dt,
-                            title.strip(),
-                            artist.strip(),
-                            length.strip(),
-                            last_play.strip(),
-                        ]
-                    )
-                    existing_keys.add(key)
-                    log.debug(f"Appended new entry: {entries[-1]}")
+            # Assign a strictly increasing datetime for every entry.
+            assigned_dt = None
+
+            if time:
+                minutes = parse_time_str(time)
+                assigned_dt = base_date + datetime.timedelta(
+                    days=day_offset, minutes=minutes
+                )
             else:
-                log.warning(f"Missing time or title in line: {line.strip()}")
+                # Use <lastplaytime> only if it parses and keeps monotonic order.
+                lp_dt = _parse_last_play_datetime(last_play)
+                if lp_dt is not None and (
+                    prev_assigned_dt is None or lp_dt > prev_assigned_dt
+                ):
+                    assigned_dt = lp_dt
+                else:
+                    # Synthesize a timestamp to preserve ordering.
+                    assigned_dt = (
+                        (prev_assigned_dt + datetime.timedelta(minutes=1))
+                        if prev_assigned_dt is not None
+                        else base_date + datetime.timedelta(days=day_offset)
+                    )
+
+            # Enforce monotonic increase (file order wins). If we ever go backwards (e.g., midnight rollover),
+            # bump forward by whole days until the timestamp is strictly increasing.
+            if prev_assigned_dt is not None:
+                while assigned_dt <= prev_assigned_dt:
+                    assigned_dt += datetime.timedelta(days=1)
+
+            # Keep the day offset aligned for subsequent explicit <time> entries.
+            day_offset = (assigned_dt.date() - base_date.date()).days
+            prev_assigned_dt = assigned_dt
+
+            full_dt = assigned_dt.strftime("%Y-%m-%d %H:%M")
+            key_parts = [full_dt, title, artist]
+
+            key = "||".join(str(v).strip().lower() for v in key_parts)
+            if key not in existing_keys:
+                entries.append(
+                    [
+                        full_dt,
+                        title.strip(),
+                        artist.strip(),
+                        length.strip(),
+                        last_play.strip(),
+                    ]
+                )
+                existing_keys.add(key)
+                log.debug(f"Appended new entry: {entries[-1]}")
     log.info(f"Parsed {len(entries)} new entries from .m3u file.")
     return entries
 
