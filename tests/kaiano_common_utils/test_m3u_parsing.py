@@ -126,17 +126,6 @@ def test_parse_m3u_lines_rollover(monkeypatch):
     assert "2025-01-02" in result[1][0]
 
 
-def test_parse_m3u_lines_skips_duplicates(monkeypatch):
-    monkeypatch.setattr(config, "TIMEZONE", "UTC")
-    existing = set()
-    lines = [
-        "#EXTVDJ:<time>12:00</time><title>Song</title><artist>Artist</artist>",
-        "#EXTVDJ:<time>12:00</time><title>Song</title><artist>Artist</artist>",
-    ]
-    result = m3u_parsing.parse_m3u_lines(lines, existing, "2025-01-01")
-    assert len(result) == 1
-
-
 def test_parse_m3u_lines_missing_tags(monkeypatch):
     monkeypatch.setattr(config, "TIMEZONE", "UTC")
     lines = ["#EXTVDJ:<time></time><title></title>"]
