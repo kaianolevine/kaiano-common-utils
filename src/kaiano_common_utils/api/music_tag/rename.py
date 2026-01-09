@@ -1,16 +1,10 @@
 import os
 import re
-import tempfile
 from typing import Dict, List, Optional
 
-import music_tag
-
-import kaiano_common_utils.google_drive as drive
 import kaiano_common_utils.logger as log
 
-from .retagger_music_tag import MusicTagIO
-
-_TAG_IO = MusicTagIO()
+from .retagger_music_tag import get_metadata
 
 
 def new_sanitize_filename(value: str) -> str:
@@ -38,76 +32,6 @@ def _unique_path(base_path: str) -> str:
         candidate = os.path.join(directory, f"{stem}_{counter}{ext}")
         counter += 1
     return candidate
-
-
-def get_metadata(file_path: str) -> Dict[str, str]:
-    """
-    Extract common audio metadata fields using mutagen for various formats.
-
-    Returns keys: artist, title, bpm, comment, album, genre, year, tracknumber, key
-    Missing values default to "" (empty string) except artist/title -> "Unknown".
-    """
-    # Preserve existing behavior: only support these extensions.
-    ext = file_path.lower().split(".")[-1]
-    if ext not in ("mp3", "flac", "m4a", "mp4"):
-        raise ValueError(f"Unsupported file format: {ext}")
-
-    # Use the shared music-tag adapter for consistent tag reading.
-    snapshot = _TAG_IO.read(file_path)
-    tags = dict(snapshot.tags or {})
-
-    # For backward-compatibility with prior mutagen-based behavior, also try to read
-    # key-related tags (which may not be included in the adapter's default field list).
-    try:
-        f = music_tag.load_file(file_path)
-        for k in ("initialkey", "key"):
-            if k not in tags and k in f:
-                v = f[k]
-                if isinstance(v, list):
-                    tags[k] = ", ".join([str(x) for x in v if x is not None])
-                else:
-                    tags[k] = str(v)
-    except Exception:
-        # If key tags can't be read, keep defaults below.
-        pass
-
-    def _get(tag: str, default: str = "") -> str:
-        try:
-            v = tags.get(tag, default)
-            if v is None:
-                return default
-            s = str(v)
-            return s if s != "None" else default
-        except Exception:
-            return default
-
-    artist = _get("artist", "Unknown")
-    title = _get("tracktitle", "Unknown")
-
-    bpm_raw = _get("bpm", "")
-    try:
-        bpm = str(int(round(float(bpm_raw)))) if bpm_raw not in (None, "") else ""
-    except (ValueError, TypeError):
-        bpm = ""
-
-    album = _get("album", "")
-    genre = _get("genre", "")
-    year = _get("date", "") or _get("year", "")
-    tracknumber = _get("tracknumber", "")
-    musical_key = _get("initialkey", "") or _get("key", "")
-    comment = _get("comment", "")
-
-    return {
-        "artist": artist,
-        "title": title,
-        "bpm": bpm,
-        "comment": comment,
-        "album": album,
-        "genre": genre,
-        "year": year,
-        "tracknumber": tracknumber,
-        "key": musical_key,
-    }
 
 
 def rename_music_file(file_path: str, output_dir: str, separator: str) -> str:
@@ -182,46 +106,6 @@ def rename_files_in_directory(directory: str, config: Dict) -> Dict[str, int]:
                 log.error(f"Failed to rename file: {file}", exc_info=True)
                 summary["failed"] += 1
     log.info(f"Summary: {summary}")
-    return summary
-
-
-def process_drive_folder(source_folder_id, dest_folder_id, separator) -> Dict[str, int]:
-    """
-    Download files from Drive, rename locally, and upload back to Drive.
-
-    Returns a summary dict: {"downloaded": int, "renamed": int, "uploaded": int, "failed": int}
-    """
-    log.info(
-        f"Processing Drive folder with parameters: source_folder_id={source_folder_id}, dest_folder_id={dest_folder_id}, separator='{separator}'"
-    )
-
-    service = drive.get_drive_service()
-
-    summary = {"downloaded": 0, "renamed": 0, "uploaded": 0, "failed": 0}
-
-    music_files = drive.list_music_files(service, source_folder_id)
-    for file in music_files:
-        try:
-            temp_path = os.path.join(tempfile.gettempdir(), file["name"])
-            drive.download_file(service, file["id"], temp_path)
-            summary["downloaded"] += 1
-            log.debug(f"Downloaded: {file['name']} to {temp_path}")
-
-            renamed_path = rename_music_file(
-                temp_path, tempfile.gettempdir(), separator
-            )
-            summary["renamed"] += 1
-            log.debug(f"Renamed to: {os.path.basename(renamed_path)}")
-
-            drive.upload_file(service, renamed_path, dest_folder_id)
-            summary["uploaded"] += 1
-            log.debug(f"Uploaded: {os.path.basename(renamed_path)}")
-        except Exception:
-            log.error(
-                f"Failed processing Drive file: {file.get('name')}", exc_info=True
-            )
-            summary["failed"] += 1
-    log.info(f"Drive process summary: {summary}")
     return summary
 
 

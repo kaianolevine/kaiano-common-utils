@@ -195,3 +195,76 @@ class MusicTagIO(TagReaderWriter):
                 continue
 
         return printed
+
+
+_TAG_IO = MusicTagIO()
+
+
+def get_metadata(file_path: str) -> Dict[str, str]:
+    """
+    Extract common audio metadata fields using mutagen for various formats.
+
+    Returns keys: artist, title, bpm, comment, album, genre, year, tracknumber, key
+    Missing values default to "" (empty string) except artist/title -> "Unknown".
+    """
+    # Preserve existing behavior: only support these extensions.
+    ext = file_path.lower().split(".")[-1]
+    if ext not in ("mp3", "flac", "m4a", "mp4"):
+        raise ValueError(f"Unsupported file format: {ext}")
+
+    # Use the shared music-tag adapter for consistent tag reading.
+    snapshot = _TAG_IO.read(file_path)
+    tags = dict(snapshot.tags or {})
+
+    # For backward-compatibility with prior mutagen-based behavior, also try to read
+    # key-related tags (which may not be included in the adapter's default field list).
+    try:
+        f = music_tag.load_file(file_path)
+        for k in ("initialkey", "key"):
+            if k not in tags and k in f:
+                v = f[k]
+                if isinstance(v, list):
+                    tags[k] = ", ".join([str(x) for x in v if x is not None])
+                else:
+                    tags[k] = str(v)
+    except Exception:
+        # If key tags can't be read, keep defaults below.
+        pass
+
+    def _get(tag: str, default: str = "") -> str:
+        try:
+            v = tags.get(tag, default)
+            if v is None:
+                return default
+            s = str(v)
+            return s if s != "None" else default
+        except Exception:
+            return default
+
+    artist = _get("artist", "Unknown")
+    title = _get("tracktitle", "Unknown")
+
+    bpm_raw = _get("bpm", "")
+    try:
+        bpm = str(int(round(float(bpm_raw)))) if bpm_raw not in (None, "") else ""
+    except (ValueError, TypeError):
+        bpm = ""
+
+    album = _get("album", "")
+    genre = _get("genre", "")
+    year = _get("date", "") or _get("year", "")
+    tracknumber = _get("tracknumber", "")
+    musical_key = _get("initialkey", "") or _get("key", "")
+    comment = _get("comment", "")
+
+    return {
+        "artist": artist,
+        "title": title,
+        "bpm": bpm,
+        "comment": comment,
+        "album": album,
+        "genre": genre,
+        "year": year,
+        "tracknumber": tracknumber,
+        "key": musical_key,
+    }
