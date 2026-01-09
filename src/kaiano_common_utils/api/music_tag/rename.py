@@ -4,8 +4,6 @@ from typing import Dict, List, Optional
 
 import kaiano_common_utils.logger as log
 
-from .retagger_music_tag import get_metadata
-
 
 def new_sanitize_filename(value: str) -> str:
     # Replace any non-alphanumeric or underscore character with underscore
@@ -34,18 +32,21 @@ def _unique_path(base_path: str) -> str:
     return candidate
 
 
-def rename_music_file(file_path: str, output_dir: str, separator: str) -> str:
+def rename_music_file(
+    file_path: str,
+    output_dir: str,
+    separator: str,
+    metadata: Dict[str, str],
+) -> str:
     """
-    Rename a single file based on extracted metadata. Returns the destination path.
+    Rename a single file based on provided metadata. Returns the destination path.
 
     Args:
         file_path: Source file to rename.
         output_dir: Target directory to place the renamed file.
         separator: Token to join filename parts.
-        extension: Optional extension override (e.g., ".mp3"). If None, preserve original.
-        dry_run: If True, do not actually rename/move files; return the intended path.
+        metadata: Pre-extracted metadata dict (e.g. bpm, title, artist, comment).
     """
-    metadata = get_metadata(file_path)
     filename_parts = [
         metadata.get("bpm", ""),
         metadata.get("title", ""),
@@ -65,7 +66,9 @@ def rename_music_file(file_path: str, output_dir: str, separator: str) -> str:
     return dest_path
 
 
-def rename_files_in_directory(directory: str, config: Dict) -> Dict[str, int]:
+def rename_files_in_directory(
+    directory: str, config: Dict, metadata: Dict[str, str]
+) -> Dict[str, int]:
     """
     Scan a directory recursively, renaming files according to config.
 
@@ -80,7 +83,6 @@ def rename_files_in_directory(directory: str, config: Dict) -> Dict[str, int]:
                 continue
             summary["processed"] += 1
             try:
-                metadata = get_metadata(full_path)
                 new_name = generate_filename(metadata, config)
                 if not new_name:
                     log.warning(f"Skipping file due to missing metadata: {file}")
