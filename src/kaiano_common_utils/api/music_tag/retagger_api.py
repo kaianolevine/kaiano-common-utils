@@ -10,12 +10,8 @@ import acoustid
 import musicbrainzngs
 
 import kaiano_common_utils.logger as log
-from kaiano_common_utils.retagger_types import (
-    Identifier,
-    TagSnapshot,
-    TrackId,
-    TrackMetadata,
-)
+
+from .retagger_types import Identifier, TagSnapshot, TrackId, TrackMetadata
 
 # NOTE: This file contains only the "API interface" pieces:
 # - AcoustID identification

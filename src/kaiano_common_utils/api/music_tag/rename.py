@@ -7,7 +7,8 @@ import music_tag
 
 import kaiano_common_utils.google_drive as drive
 import kaiano_common_utils.logger as log
-from kaiano_common_utils.retagger_music_tag import MusicTagIO
+
+from .retagger_music_tag import MusicTagIO
 
 _TAG_IO = MusicTagIO()
 

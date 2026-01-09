@@ -3,12 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from kaiano_common_utils.retagger_api import (
-    AcoustIdIdentifier,
-    MusicBrainzRecordingProvider,
-)
-from kaiano_common_utils.retagger_music_tag import MusicTagIO
-from kaiano_common_utils.retagger_types import (
+from .retagger_api import AcoustIdIdentifier, MusicBrainzRecordingProvider
+from .retagger_music_tag import MusicTagIO
+from .retagger_types import (
     Identifier,
     MetadataProvider,
     TagReaderWriter,

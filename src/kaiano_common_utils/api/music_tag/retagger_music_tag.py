@@ -7,11 +7,8 @@ import music_tag
 from mutagen.id3 import ID3, TDRC, TYER, ID3NoHeaderError
 
 import kaiano_common_utils.logger as log
-from kaiano_common_utils.retagger_types import (
-    TagReaderWriter,
-    TagSnapshot,
-    TrackMetadata,
-)
+
+from .retagger_types import TagReaderWriter, TagSnapshot, TrackMetadata
 
 # ---------- music-tag adapter ----------
 TAG_FIELDS = [
