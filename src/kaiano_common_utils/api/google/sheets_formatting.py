@@ -1,9 +1,22 @@
+import time
 from typing import Any, Dict, List, Optional
 
 from googleapiclient.errors import HttpError
 
-from kaiano_common_utils import google_sheets, helpers
 from kaiano_common_utils import logger as log
+
+from ..google import sheets as google_sheets
+
+
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) == 6 and all(c in "0123456789abcdefABCDEF" for c in hex_color):
+        r, g, b = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    elif len(hex_color) == 3 and all(c in "0123456789abcdefABCDEF" for c in hex_color):
+        r, g, b = tuple(int(hex_color[i] * 2, 16) for i in range(3))
+    else:
+        r, g, b = (255, 255, 255)
+    return {"red": r / 255, "green": g / 255, "blue": b / 255}
 
 
 # --- Helper functions for quota-friendly, robust formatting ---
@@ -55,12 +68,8 @@ def _batch_update_with_retry(
                 f"⚠️ {operation} hit retryable error (HTTP {status}) on attempt {attempt}/{max_attempts}. "
                 f"Backing off for {delay_s:.1f}s..."
             )
-            try:
-                helpers.sleep(delay_s)  # if helpers exposes sleep
-            except Exception:
-                import time
 
-                time.sleep(delay_s)
+            time.sleep(delay_s)
             delay_s = min(delay_s * 2, 16.0)
 
     if last_err:
@@ -340,12 +349,7 @@ def apply_formatting_to_sheet(spreadsheet_id):
 
             # Light throttle between chunks (helps when spreadsheets grow large)
             if chunk_num < total_chunks:
-                try:
-                    helpers.sleep(0.5)
-                except Exception:
-                    import time
-
-                    time.sleep(0.5)
+                time.sleep(0.5)
 
         # --- Column width buffer pass ---
         # Auto-resize sets widths, but can be a little tight. We re-fetch the computed
@@ -419,12 +423,7 @@ def apply_formatting_to_sheet(spreadsheet_id):
                     )
 
                     if chunk_num < total_chunks:
-                        try:
-                            helpers.sleep(0.5)
-                        except Exception:
-                            import time
-
-                            time.sleep(0.5)
+                        time.sleep(0.5)
 
         except Exception as e:
             log.warning(f"Column width buffer pass failed (continuing without it): {e}")
@@ -789,9 +788,7 @@ def set_sheet_formatting(
 
         def _bg(color: str):
             try:
-                return {
-                    "userEnteredFormat": {"backgroundColor": helpers.hex_to_rgb(color)}
-                }
+                return {"userEnteredFormat": {"backgroundColor": hex_to_rgb(color)}}
             except Exception:
                 return {"userEnteredFormat": {}}
 

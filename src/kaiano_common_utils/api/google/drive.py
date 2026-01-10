@@ -1,13 +1,14 @@
 import io
 import os
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
-import kaiano_common_utils._google_credentials as google_api
 import kaiano_common_utils.google_sheets as google_sheets
 from kaiano_common_utils import logger as log
+
+from ..google import credentials as google_api
 
 log = log.get_logger()
 FOLDER_CACHE = {}
@@ -22,6 +23,14 @@ def extract_date_from_filename(filename):
 
     match = re.match(r"(\d{4}-\d{2}-\d{2})", filename)
     return match.group(1) if match else filename
+
+
+def delete_drive_file(service: Any, file_id: str) -> None:
+    """
+    Permanently delete a file from Google Drive.
+    Only call this after a successful end-to-end process.
+    """
+    service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
 
 
 def list_files_in_folder(
