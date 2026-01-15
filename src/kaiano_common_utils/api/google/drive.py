@@ -215,6 +215,20 @@ class DriveFacade:
         )
         return created["id"]
 
+    def delete_file(self, file_id: str) -> None:
+        """Permanently delete a file from Google Drive.
+
+        Use with care. This should only be called after a successful end-to-end process.
+        """
+
+        execute_with_retry(
+            lambda: self._service.files()
+            .delete(fileId=file_id, supportsAllDrives=True)
+            .execute(),
+            context=f"deleting file {file_id}",
+            retry=self._retry,
+        )
+
 
 def get_drive_service():
     return google_api.get_drive_client()
@@ -232,7 +246,13 @@ def delete_drive_file(service: Any, file_id: str) -> None:
     Permanently delete a file from Google Drive.
     Only call this after a successful end-to-end process.
     """
-    service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+    execute_with_retry(
+        lambda: service.files()
+        .delete(fileId=file_id, supportsAllDrives=True)
+        .execute(),
+        context=f"deleting file {file_id}",
+        retry=RetryConfig(),
+    )
 
 
 def list_files_in_folder(
