@@ -136,7 +136,7 @@ def normalize_prefixes_in_source(drive):
         log.error(f"normalize_prefixes_in_source: unexpected error: {e}")
 
 
-def _safe_str(v: Any) -> str:
+def safe_str(v: Any) -> str:
     """Best-effort stringify without turning missing values into the literal 'None'."""
     if v is None:
         return ""
@@ -155,7 +155,7 @@ def title_case_words(v: Any) -> str:
     Capitalize every word that starts with a letter.
     Preserves existing punctuation and spacing.
     """
-    s = _safe_str(v)
+    s = safe_str(v)
     if not s:
         return ""
 
@@ -169,11 +169,11 @@ def title_case_words(v: Any) -> str:
 
 def normalize_for_compare(v: Any) -> str:
     """Canonical comparison: None / 'None' / whitespace all become empty string."""
-    return _safe_str(v).strip()
+    return safe_str(v).strip()
 
 
 def normalize_year_for_tag(v: Any) -> str:
-    s = _safe_str(v).strip()
+    s = safe_str(v).strip()
     if not s:
         return ""
     if len(s) >= 4 and s[:4].isdigit():
@@ -193,7 +193,7 @@ def safe_filename_component(v: Any) -> str:
     - Remove all non-alphanumeric characters (except underscore)
     - Collapse multiple underscores
     """
-    s = _safe_str(v)
+    s = safe_str(v)
 
     if not s:
         return ""
