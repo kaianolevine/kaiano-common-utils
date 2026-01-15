@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import List
 
-from kaiano_common_utils.api.music_tag.retagger_api import AcoustIdIdentifier
-from kaiano_common_utils.api.music_tag.retagger_types import TagSnapshot, TrackId
+from .retagger_api import AcoustIdIdentifier
+from .retagger_types import TagSnapshot, TrackId
 
 
 class IdentifierFacade:

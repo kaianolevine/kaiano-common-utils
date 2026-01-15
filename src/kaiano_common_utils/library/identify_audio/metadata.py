@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from kaiano_common_utils.api.music_tag.retagger_api import MusicBrainzRecordingProvider
-from kaiano_common_utils.api.music_tag.retagger_types import TrackId, TrackMetadata
+from .retagger_api import MusicBrainzRecordingProvider
+from .retagger_types import TrackId, TrackMetadata
 
 
 class MetadataFacade:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Dict
 
-from kaiano_common_utils.api.music_tag.retagger_music_tag import MusicTagIO
-from kaiano_common_utils.api.music_tag.retagger_types import TagSnapshot, TrackMetadata
+from .retagger_music_tag import MusicTagIO
+from .retagger_types import TagSnapshot, TrackMetadata
 
 
 class TagFacade:

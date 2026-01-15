@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from kaiano_common_utils.api.music_tag.retagger_types import TrackId, TrackMetadata
+from .retagger_types import TrackId, TrackMetadata
 
 
 @dataclass(frozen=True)

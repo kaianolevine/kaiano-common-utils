@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 
-from kaiano_common_utils.api.music_tag.retagger_types import TrackMetadata
+from .retagger_types import TrackMetadata
 
 
 class RenameFacade:

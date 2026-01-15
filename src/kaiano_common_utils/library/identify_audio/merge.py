@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from kaiano_common_utils.api.music_tag.retagger_types import TagSnapshot, TrackMetadata
+from .retagger_types import TagSnapshot, TrackMetadata
 
 
 class MergeFacade:
