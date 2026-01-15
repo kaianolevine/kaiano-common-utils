@@ -1,0 +1,16 @@
+"""kaiano_common_utils.google
+
+This package is the single, stable interface layer for Google APIs used across
+your projects.
+
+External code should only import :class:`~kaiano_common_utils.google.GoogleAPI`:
+
+    from kaiano_common_utils.google import GoogleAPI
+
+    g = GoogleAPI.from_env()
+    rows = g.sheets.read_values(spreadsheet_id, "Sheet1!A1:C10")
+"""
+
+from .api import GoogleAPI
+
+__all__ = ["GoogleAPI"]
