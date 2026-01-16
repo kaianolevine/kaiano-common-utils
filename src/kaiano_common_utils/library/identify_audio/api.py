@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 import kaiano_common_utils.helpers as helpers
-from kaiano_common_utils.library.identify_audio.api import IdentifyAudio
-from kaiano_common_utils.library.identify_audio.retagger_types import (
-    TrackMetadata as TagUpdate,
-)
+
+from .identify import IdentifyAudio
+from .retagger_types import TrackMetadata as TagUpdate
 
 
 @dataclass
