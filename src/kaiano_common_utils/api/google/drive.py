@@ -212,6 +212,29 @@ class DriveFacade:
         )
         return created["id"]
 
+    def update_file(
+        self,
+        file_id: str,
+        filepath: str,
+        *,
+        mime_type: Optional[str] = None,
+    ) -> None:
+        """Upload a new version of an existing Drive file (in-place update)."""
+
+        media = MediaFileUpload(filepath, mimetype=mime_type, resumable=True)
+
+        execute_with_retry(
+            lambda: self._service.files()
+            .update(
+                fileId=file_id,
+                media_body=media,
+                supportsAllDrives=True,
+            )
+            .execute(),
+            context=f"updating file {file_id} from {os.path.basename(filepath)}",
+            retry=self._retry,
+        )
+
     def delete_file(self, file_id: str) -> None:
         """Permanently delete a file from Google Drive.
 
