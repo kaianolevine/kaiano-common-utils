@@ -1,202 +1,149 @@
-from __future__ import annotations
+# AudioToolbox single-entry API (local filesystem only)
 
-import kaiano_common_utils.logger as log
+import os
+from dataclasses import dataclass
+from typing import Optional
 
-from .identify import IdentifierFacade
-from .merge import MergeFacade
-from .metadata import MetadataFacade
-from .policies import IdentificationPolicy, RenamePolicy, TagPolicy
-from .rename import RenameFacade
-from .result import ProcessResult, ProcessWarning
-from .retagger_api import AcoustIdIdentifier, MusicBrainzRecordingProvider
-from .tags import TagFacade
-
-log = log.get_logger()
+import kaiano_common_utils.helpers as helpers
+from kaiano_common_utils.library.identify_audio.api import IdentifyAudio
+from kaiano_common_utils.library.identify_audio.retagger_types import (
+    TrackMetadata as TagUpdate,
+)
 
 
-class IdentifyAudio:
-    """Single entry point for identify + fetch metadata + tag + rename.
+@dataclass
+class RenameProposal:
+    src_path: str
+    dest_path: str
+    dest_name: str
 
-    This is intentionally small and stable. Internals (AcoustID, MusicBrainz,
-    music_tag/mutagen) are hidden behind facades.
-    """
 
-    def __init__(
+class RenameFacade:
+    def propose(
         self,
+        path: str,
         *,
-        identify: IdentifierFacade,
-        metadata: MetadataFacade,
-        tags: TagFacade,
-        merge: MergeFacade,
-        rename: RenameFacade,
-        id_policy: IdentificationPolicy | None = None,
-    ):
-        self.identify = identify
-        self.metadata = metadata
-        self.tags = tags
-        self.merge = merge
-        self.rename = rename
-        self.id_policy = id_policy or IdentificationPolicy()
+        update: Optional[TagUpdate] = None,
+        title: Optional[str] = None,
+        artist: Optional[str] = None,
+        template: str = "{title}_{artist}",
+    ) -> RenameProposal:
+        base_dir = os.path.dirname(path)
+        original = os.path.basename(path)
+        _, ext = os.path.splitext(original)
 
-    @classmethod
-    def default(
-        cls,
-        *,
-        acoustid_api_key: str,
-        id_policy: IdentificationPolicy | None = None,
-        app_name: str = "identify-audio",
-        app_version: str = "0.1.0",
-        contact: str = "https://example.com",
-        throttle_s: float = 1.0,
-    ) -> "IdentifyAudio":
-        id_policy = id_policy or IdentificationPolicy()
-        identifier = AcoustIdIdentifier(
-            api_key=acoustid_api_key,
-            min_confidence=id_policy.min_confidence,
-            max_candidates=id_policy.max_candidates,
-        )
-        provider = MusicBrainzRecordingProvider(
-            app_name=app_name,
-            app_version=app_version,
-            contact=contact,
-            throttle_s=throttle_s,
-        )
-        return cls(
-            identify=IdentifierFacade(identifier),
-            metadata=MetadataFacade(provider),
-            tags=TagFacade(),
-            merge=MergeFacade(),
-            rename=RenameFacade(),
-            id_policy=id_policy,
-        )
+        if update:
+            title = title or update.title
+            artist = artist or update.artist
 
-    @classmethod
-    def from_env(
-        cls,
-        *,
-        acoustid_api_key: str,
-        id_policy: IdentificationPolicy | None = None,
-        app_name: str = "identify-audio",
-        app_version: str = "0.1.0",
-        contact: str = "https://example.com",
-        throttle_s: float = 1.0,
-    ) -> "IdentifyAudio":
-        # keeping parity with GoogleAPI.from_env pattern
-        return cls.default(
-            acoustid_api_key=acoustid_api_key,
-            id_policy=id_policy,
-            app_name=app_name,
-            app_version=app_version,
-            contact=contact,
-            throttle_s=throttle_s,
-        )
+        t = helpers.safe_filename_component(title)
+        a = helpers.safe_filename_component(artist)
+
+        if t and a:
+            name = template.format(title=t, artist=a) + ext
+        else:
+            name = original
+
+        return RenameProposal(path, os.path.join(base_dir, name), name)
+
+    def apply(self, proposal: RenameProposal) -> str:
+        if proposal.src_path != proposal.dest_path:
+            os.rename(proposal.src_path, proposal.dest_path)
+        return proposal.dest_path
+
+
+@dataclass
+class PipelineResult:
+    path_in: str
+    path_out: str
+    desired_filename: str
+    identified: bool
+    confidence: Optional[float]
+    wrote_tags: bool
+    renamed: bool
+    reason: str
+
+
+class Pipeline:
+    def __init__(self, ia: IdentifyAudio, renamer: RenameFacade):
+        self.ia = ia
+        self.renamer = renamer
 
     def process_file(
         self,
         path: str,
         *,
-        tag: TagPolicy | None = None,
-        rename: RenamePolicy | None = None,
-    ) -> ProcessResult:
-        """Process a single local file in-place.
+        do_identify: bool = True,
+        do_tag: bool = True,
+        do_rename: bool = True,
+        min_confidence: float = 0.9,
+    ) -> PipelineResult:
 
-        Steps:
-        1) Read current tags
-        2) Identify via AcoustID
-        3) Fetch metadata via MusicBrainz (best candidate)
-        4) Merge to build tag updates
-        5) Write tags (optionally VDJ-compatible)
-        6) Rename file (optional)
-        """
+        snapshot = self.ia.tags.read(path)
 
-        tag = tag or TagPolicy.virtualdj_safe()
-        rename = rename or RenamePolicy.template_policy("{title}_{artist}")
+        chosen = None
+        if do_identify:
+            try:
+                cands = self.ia.identify.candidates(path, snapshot)
+                if cands:
+                    chosen = max(cands, key=lambda c: c.confidence)
+            except Exception:
+                pass
 
-        res = ProcessResult(path_in=path)
-        try:
-            snapshot = self.tags.read(path)
-
-            candidates = self.identify.candidates(path, snapshot)
-            if not candidates:
-                res.warnings.append(
-                    ProcessWarning(
-                        code="no_candidates", message="AcoustID returned no candidates"
-                    )
+        if not chosen or chosen.confidence < min_confidence:
+            if do_tag:
+                self.ia.tags.write(
+                    path, snapshot.to_metadata(), ensure_virtualdj_compat=True
                 )
-                if tag.on_identify_fail == "passthrough":
-                    updates = self.merge.passthrough(snapshot)
-                    self.tags.write(
-                        path,
-                        updates,
-                        ensure_virtualdj_compat=tag.ensure_virtualdj_compat,
-                    )
-                    res.wrote_tags = True
-                    res.identified = False
-                    # Rename based on passthrough only if enabled and fields present
-                    if rename.enabled and (
-                        not rename.require_title_and_artist
-                        or (updates.title and updates.artist)
-                    ):
-                        res.path_out = self.rename.apply(
-                            path, updates, template=rename.template
-                        )
-                        res.renamed = res.path_out != path
-                    return res
-                return res
-
-            chosen = max(candidates, key=lambda c: c.confidence)
-            res.chosen = chosen
-
-            # Enforce min confidence here too (extra safety if caller overrides identifier)
-            if chosen.confidence < (self.id_policy.min_confidence or 0.0):
-                res.warnings.append(
-                    ProcessWarning(
-                        code="low_confidence",
-                        message=f"Best candidate {chosen.confidence:.3f} below threshold {self.id_policy.min_confidence:.2f}",
-                    )
-                )
-                if tag.on_identify_fail == "passthrough":
-                    updates = self.merge.passthrough(snapshot)
-                    self.tags.write(
-                        path,
-                        updates,
-                        ensure_virtualdj_compat=tag.ensure_virtualdj_compat,
-                    )
-                    res.wrote_tags = True
-                    res.identified = False
-                    if rename.enabled and (
-                        not rename.require_title_and_artist
-                        or (updates.title and updates.artist)
-                    ):
-                        res.path_out = self.rename.apply(
-                            path, updates, template=rename.template
-                        )
-                        res.renamed = res.path_out != path
-                    return res
-                return res
-
-            meta = self.metadata.fetch(chosen)
-            res.metadata = meta
-            res.identified = True
-
-            updates = self.merge.build_updates(snapshot, meta)
-            self.tags.write(
-                path, updates, ensure_virtualdj_compat=tag.ensure_virtualdj_compat
+            out_path = path
+            name = os.path.basename(path)
+            if do_rename:
+                p = self.renamer.propose(path, update=snapshot.to_metadata())
+                out_path = self.renamer.apply(p)
+                name = p.dest_name
+            return PipelineResult(
+                path,
+                out_path,
+                name,
+                False,
+                None,
+                do_tag,
+                do_rename,
+                "no_or_low_confidence",
             )
-            res.wrote_tags = True
 
-            if rename.enabled and (
-                not rename.require_title_and_artist
-                or (updates.title and updates.artist)
-            ):
-                res.path_out = self.rename.apply(
-                    path, updates, template=rename.template
-                )
-                res.renamed = res.path_out != path
+        meta = self.ia.metadata.fetch(chosen)
+        if do_tag:
+            self.ia.tags.write(path, meta, ensure_virtualdj_compat=True)
 
-            return res
+        out_path = path
+        name = os.path.basename(path)
+        if do_rename:
+            p = self.renamer.propose(path, update=meta)
+            out_path = self.renamer.apply(p)
+            name = p.dest_name
 
-        except Exception as e:
-            res.error = str(e)
-            log.error(f"[IdentifyAudio] Failed processing {path}: {e!r}")
-            return res
+        return PipelineResult(
+            path,
+            out_path,
+            name,
+            True,
+            float(chosen.confidence),
+            do_tag,
+            do_rename,
+            "ok",
+        )
+
+
+class AudioToolbox:
+    def __init__(self, ia: IdentifyAudio):
+        self.identify = ia.identify
+        self.metadata = ia.metadata
+        self.tags = ia.tags
+        self.rename = RenameFacade()
+        self.pipeline = Pipeline(ia, self.rename)
+
+    @classmethod
+    def from_env(cls, *, acoustid_api_key: str) -> "AudioToolbox":
+        ia = IdentifyAudio.from_env(acoustid_api_key=acoustid_api_key)
+        return cls(ia)
