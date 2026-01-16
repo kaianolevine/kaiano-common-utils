@@ -176,3 +176,11 @@ class SheetsFacade:
             }
         ]
         return self.batch_update(spreadsheet_id, requests)
+
+    def get_range_format(
+        start_col: str, start_row: int, end_col: str, end_row: int | None = None
+    ) -> str:
+        """Build an A1 range like A5:D or A5:D10."""
+        if end_row is None:
+            return f"{start_col}{start_row}:{end_col}"
+        return f"{start_col}{start_row}:{end_col}{end_row}"
