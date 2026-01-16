@@ -1,7 +1,15 @@
-"""Unified audio identification + tagging + renaming interface."""
+"""Unified audio identification + tagging + renaming (local filesystem only).
 
-from .api import AudioToolbox, IdentifyAudio
-from .policies import IdentificationPolicy
+Recommended entry point:
+- AudioToolbox
+
+Advanced:
+- IdentifyAudio (lower-level orchestrator)
+"""
+
+from .api import AudioToolbox
+from .identify import IdentifyAudio
+from .policies import IdentificationPolicy, RenamePolicy, TagPolicy
 
 # Low-level interfaces (advanced / escape-hatch use only)
 from .retagger_api import AcoustIdIdentifier, MusicBrainzRecordingProvider
@@ -12,6 +20,8 @@ __all__ = [
     "AudioToolbox",
     "IdentifyAudio",
     "IdentificationPolicy",
+    "TagPolicy",
+    "RenamePolicy",
     "TagSnapshot",
     "TrackId",
     "TrackMetadata",
