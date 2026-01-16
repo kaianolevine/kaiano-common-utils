@@ -1,31 +1,16 @@
-from __future__ import annotations
-
-from typing import Dict
-
-from .retagger_music_tag import MusicTagIO
-from .retagger_types import TagSnapshot, TrackMetadata
-
-
 class TagFacade:
-    """Facade for reading/writing tags.
+    def __init__(self, io):
+        self._io = io
 
-    Wraps MusicTagIO (music_tag + mutagen) and provides stable methods.
-    """
-
-    def __init__(self, io: MusicTagIO | None = None):
-        self._io = io or MusicTagIO()
-
-    def read(self, path: str) -> TagSnapshot:
+    def read(self, path):
         return self._io.read(path)
 
-    def write(
-        self,
-        path: str,
-        updates: TrackMetadata,
-        *,
-        ensure_virtualdj_compat: bool = False,
-    ) -> None:
-        self._io.write(path, updates, ensure_virtualdj_compat=ensure_virtualdj_compat)
+    def write(self, path, metadata, *, ensure_virtualdj_compat=False):
+        return self._io.write(
+            path,
+            metadata,
+            ensure_virtualdj_compat=ensure_virtualdj_compat,
+        )
 
-    def dump(self, path: str) -> Dict[str, str]:
-        return self._io.dump_tags(path)
+    def dump(self, path):
+        return self._io.dump(path)

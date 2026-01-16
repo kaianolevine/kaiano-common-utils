@@ -11,8 +11,6 @@ from .tags import TagFacade
 
 
 class IdentifierFacade:
-    """Thin facade over AcoustIdIdentifier."""
-
     def __init__(self, identifier: AcoustIdIdentifier):
         self._identifier = identifier
 
@@ -21,18 +19,9 @@ class IdentifierFacade:
 
 
 class IdentifyAudio:
-    """Local-only orchestrator exposing identify / metadata / tags facades.
+    """Local-only orchestrator."""
 
-    This module intentionally has *no* Drive dependency. Callers should pass local file
-    paths. Drive middleware (if any) is responsible for downloading/uploading.
-    """
-
-    def __init__(
-        self,
-        identifier: AcoustIdIdentifier,
-        provider: MusicBrainzRecordingProvider,
-        tag_io: MusicTagIO,
-    ):
+    def __init__(self, identifier, provider, tag_io):
         self.identify = IdentifierFacade(identifier)
         self.metadata = MetadataFacade(provider)
         self.tags = TagFacade(tag_io)
@@ -48,11 +37,6 @@ class IdentifyAudio:
         contact: str = "",
         throttle_s: float = 1.0,
     ) -> "IdentifyAudio":
-        """Construct IdentifyAudio using the same parameters used across repos.
-
-        `id_policy` controls min_confidence/max_candidates for AcoustID.
-        MusicBrainz throttling is handled by the underlying provider.
-        """
 
         id_policy = id_policy or IdentificationPolicy()
 
@@ -62,7 +46,6 @@ class IdentifyAudio:
             max_candidates=id_policy.max_candidates,
         )
 
-        # MusicBrainz provider constructor parameters may evolve; keep this call explicit.
         provider = MusicBrainzRecordingProvider(
             app_name=app_name,
             app_version=app_version,
@@ -71,4 +54,4 @@ class IdentifyAudio:
         )
 
         tag_io = MusicTagIO()
-        return cls(identifier=identifier, provider=provider, tag_io=tag_io)
+        return cls(identifier, provider, tag_io)
