@@ -11,7 +11,31 @@ from kaiano_common_utils import logger as log
 
 log = log.get_logger()
 
-_spotify_client: Spotify | None = None
+
+# --- Centralized retry helpers ---
+
+
+def _sleep_backoff(attempt: int, base_seconds: int = 2) -> None:
+    time.sleep(base_seconds * attempt)
+
+
+def _is_retryable_spotify_exception(e: SpotifyException) -> bool:
+    if e.http_status == 429:
+        return True
+    if e.http_status is not None and e.http_status >= 500:
+        return True
+    return False
+
+
+def _sleep_for_rate_limit(e: SpotifyException, default_seconds: int = 2) -> None:
+    try:
+        retry_after = int((e.headers or {}).get("Retry-After", default_seconds))
+    except Exception:
+        retry_after = default_seconds
+    time.sleep(max(1, retry_after))
+
+
+_spotify_api: "SpotifyAPI" | None = None
 
 
 class NoopCacheHandler(CacheHandler):
@@ -22,226 +46,387 @@ class NoopCacheHandler(CacheHandler):
         pass
 
 
-def get_spotify_client() -> Spotify:
-    """Return Spotify client, preferring refresh-token flow in CI."""
-    global _spotify_client
-    if _spotify_client is not None:
-        return _spotify_client
-    if config.SPOTIPY_REFRESH_TOKEN:
-        log.debug("🔄 Using refresh-token authentication.")
-        _spotify_client = get_spotify_client_from_refresh()
-    else:
-        log.debug("⚙️ Using OAuth (local interactive) authentication.")
-        _spotify_client = spotipy.Spotify(
-            auth_manager=SpotifyOAuth(
-                client_id=config.SPOTIPY_CLIENT_ID,
-                client_secret=config.SPOTIPY_CLIENT_SECRET,
-                redirect_uri=config.SPOTIPY_REDIRECT_URI,
-                scope="playlist-modify-public playlist-modify-private",
-                cache_path=".cache-ci",
-                open_browser=False,
+# --- SpotifyAPI facade class ---
+
+
+class SpotifyAPI:
+    """Single entry point for Spotify operations.
+
+    This mirrors the pattern used by GoogleAPI: one object owns auth/client and provides
+    stable methods with consistent retry behavior.
+    """
+
+    def __init__(self):
+        self._client: Spotify | None = None
+
+    @classmethod
+    def from_env(cls) -> "SpotifyAPI":
+        return cls()
+
+    @property
+    def client(self) -> Spotify:
+        if self._client is not None:
+            return self._client
+
+        if config.SPOTIPY_REFRESH_TOKEN:
+            log.debug("🔄 Using refresh-token authentication.")
+            self._client = self._client_from_refresh()
+        else:
+            log.debug("⚙️ Using OAuth (local interactive) authentication.")
+            self._client = spotipy.Spotify(
+                auth_manager=SpotifyOAuth(
+                    client_id=config.SPOTIPY_CLIENT_ID,
+                    client_secret=config.SPOTIPY_CLIENT_SECRET,
+                    redirect_uri=config.SPOTIPY_REDIRECT_URI,
+                    scope="playlist-modify-public playlist-modify-private",
+                    cache_path=".cache-ci",
+                    open_browser=False,
+                )
             )
+
+        return self._client
+
+    def _client_from_refresh(self) -> Spotify:
+        client_id = config.SPOTIPY_CLIENT_ID
+        client_secret = config.SPOTIPY_CLIENT_SECRET
+        redirect_uri = config.SPOTIPY_REDIRECT_URI
+        refresh_token = config.SPOTIPY_REFRESH_TOKEN
+
+        log.debug(
+            f"Loaded env vars: "
+            f"client_id={'set' if client_id else 'unset'}, "
+            f"client_secret={'set' if client_secret else 'unset'}, "
+            f"redirect_uri={'set' if redirect_uri else 'unset'}, "
+            f"refresh_token={'set' if refresh_token else 'unset'}"
         )
-    return _spotify_client
 
+        if not all([client_id, client_secret, redirect_uri, refresh_token]):
+            log.critical("Missing one or more required Spotify credentials.")
+            raise ValueError("Missing one or more required Spotify credentials.")
 
-def get_spotify_client_from_refresh() -> Spotify:
-    log.debug("🔐 Called with no parameters.")
-    log.debug("🔐 Loading Spotify credentials from environment variables...")
+        auth_manager = SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope="playlist-modify-public playlist-modify-private",
+            cache_handler=NoopCacheHandler(),
+        )
 
-    client_id = config.SPOTIPY_CLIENT_ID
-    client_secret = config.SPOTIPY_CLIENT_SECRET
-    redirect_uri = config.SPOTIPY_REDIRECT_URI
-    refresh_token = config.SPOTIPY_REFRESH_TOKEN
+        max_retries = 3
+        base_backoff_seconds = 2
 
-    log.debug(
-        f"Loaded env vars: "
-        f"client_id={'set' if client_id else 'unset'}, "
-        f"client_secret={'set' if client_secret else 'unset'}, "
-        f"redirect_uri={'set' if redirect_uri else 'unset'}, "
-        f"refresh_token={'set' if refresh_token else 'unset'}"
-    )
-
-    if not all([client_id, client_secret, redirect_uri, refresh_token]):
-        log.critical("Missing one or more required Spotify credentials.")
-        raise ValueError("Missing one or more required Spotify credentials.")
-
-    log.info("✅ All Spotify environment variables found. Initializing client...")
-
-    auth_manager = SpotifyOAuth(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri=redirect_uri,
-        scope="playlist-modify-public playlist-modify-private",
-        cache_handler=NoopCacheHandler(),
-    )
-
-    max_retries = 3
-    base_backoff_seconds = 2
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            log.debug(
-                f"Refreshing Spotify access token (attempt {attempt}/{max_retries})..."
-            )
-            token_info = auth_manager.refresh_access_token(refresh_token)
-            log.info("✅ Obtained new Spotify access token.")
-            return Spotify(auth=token_info["access_token"])
-
-        except (SpotifyOauthError, requests.exceptions.RequestException) as e:
-            log.warning(
-                f"Spotify token refresh failed "
-                f"(attempt {attempt}/{max_retries}): {e}"
-            )
-
-            if attempt < max_retries:
-                sleep_for = base_backoff_seconds * attempt
-                log.info(f"Retrying Spotify token refresh in {sleep_for} seconds...")
-                time.sleep(sleep_for)
-                continue
-
-            log.error("❌ Exceeded maximum retries while refreshing Spotify token.")
-            raise
-
-        except Exception as e:
-            log.error(
-                f"❌ Unexpected error while refreshing Spotify token: {e}",
-                exc_info=True,
-            )
-            raise
-
-
-def search_track(artist: str, title: str) -> str | None:
-    log.debug(f"Called with artist='{artist}', title='{title}'")
-    sp = get_spotify_client()
-    query = f"artist:{artist} track:{title}"
-    log.debug(f"Constructed query: {query}")
-
-    max_retries = 3
-    backoff_seconds = 2
-
-    for attempt in range(max_retries):
-        try:
-            results = sp.search(q=query, type="track", limit=1)
-            tracks = results.get("tracks", {}).get("items", [])
-            log.debug(f"Number of tracks found: {len(tracks)}")
-            if tracks:
-                found_artist = (
-                    tracks[0]["artists"][0]["name"]
-                    if tracks[0].get("artists")
-                    else "Unknown Artist"
+        for attempt in range(1, max_retries + 1):
+            try:
+                log.debug(
+                    f"Refreshing Spotify access token (attempt {attempt}/{max_retries})..."
                 )
-                found_title = tracks[0].get("name", "Unknown Title")
-                string_original_track = f"{artist} - {title}"
-                string_found_track = f"{found_artist} - {found_title}"
-                if string_original_track.lower() != string_found_track.lower():
+                token_info = auth_manager.refresh_access_token(refresh_token)
+                log.info("✅ Obtained new Spotify access token.")
+                return Spotify(auth=token_info["access_token"])
+
+            except (SpotifyOauthError, requests.exceptions.RequestException) as e:
+                log.warning(
+                    f"Spotify token refresh failed "
+                    f"(attempt {attempt}/{max_retries}): {e}"
+                )
+
+                if attempt < max_retries:
+                    _sleep_backoff(attempt, base_seconds=base_backoff_seconds)
+                    continue
+
+                log.error("❌ Exceeded maximum retries while refreshing Spotify token.")
+                raise
+
+            except Exception as e:
+                log.error(
+                    f"❌ Unexpected error while refreshing Spotify token: {e}",
+                    exc_info=True,
+                )
+                raise
+
+    def _call_with_retry(self, fn, *, context: str, max_retries: int = 3):
+        for attempt in range(1, max_retries + 1):
+            try:
+                return fn()
+            except requests.exceptions.ReadTimeout as e:
+                log.warning(
+                    f"Spotify timeout while {context} (attempt {attempt}/{max_retries}): {e}"
+                )
+                if attempt < max_retries:
+                    _sleep_backoff(attempt)
+                    continue
+                raise
+            except SpotifyException as e:
+                if e.http_status == 429:
                     log.warning(
-                        f"Original track: {string_original_track} (URI: {tracks[0]['uri']})"
+                        f"Rate limited by Spotify API while {context}. Respecting Retry-After."
                     )
+                    _sleep_for_rate_limit(e)
+                    continue
+                if _is_retryable_spotify_exception(e) and attempt < max_retries:
                     log.warning(
-                        f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
+                        f"Retryable Spotify error while {context} (attempt {attempt}/{max_retries}): {e}"
                     )
-                else:
-                    log.info(
-                        f"Found track: {string_found_track} (URI: {tracks[0]['uri']})"
-                    )
-                return tracks[0]["uri"]
-            else:
-                log.warning(
-                    f"No track found for the given artist/title: {artist} - {title}"
-                )
-                return None
+                    _sleep_backoff(attempt)
+                    continue
+                raise
 
-        except requests.exceptions.ReadTimeout as e:
-            log.warning(
-                f"Spotify request timed out on attempt {attempt+1}/{max_retries}: {e}"
+    # --- Public facade methods ---
+
+    def search_track(self, artist: str, title: str) -> str | None:
+        sp = self.client
+        query = f"artist:{artist} track:{title}"
+
+        try:
+            results = self._call_with_retry(
+                lambda: sp.search(q=query, type="track", limit=1),
+                context=f"searching track '{artist} - {title}'",
             )
-            if attempt < max_retries - 1:
-                time.sleep(backoff_seconds * (attempt + 1))
-                continue
-            else:
-                log.error("Exceeded retry limit due to repeated timeouts.")
-                return None
-
-        except SpotifyException as e:
-            if e.http_status == 429:
-                retry_after = int(e.headers.get("Retry-After", 2))
-                log.warning(
-                    f"Rate limited by Spotify API. Sleeping for {retry_after} seconds."
-                )
-                time.sleep(retry_after)
-                continue
-            elif e.http_status == 403:
-                log.warning(
-                    "Forbidden error (403) from Spotify API. Check permissions."
-                )
-                return None
-            elif e.http_status >= 500:
-                log.error(f"Server error {e.http_status} from Spotify API: {e}")
-                return None
-            else:
-                log.error(f"SpotifyException encountered: {e}")
-                return None
-
         except Exception as e:
             log.error(f"Unexpected error during Spotify search: {e}", exc_info=True)
             return None
 
-    log.warning("Exhausted retries without success.")
-    return None
+        tracks = results.get("tracks", {}).get("items", [])
+        if not tracks:
+            log.warning(
+                f"No track found for the given artist/title: {artist} - {title}"
+            )
+            return None
+
+        found_artist = (
+            tracks[0]["artists"][0]["name"]
+            if tracks[0].get("artists")
+            else "Unknown Artist"
+        )
+        found_title = tracks[0].get("name", "Unknown Title")
+        string_original_track = f"{artist} - {title}"
+        string_found_track = f"{found_artist} - {found_title}"
+
+        if string_original_track.lower() != string_found_track.lower():
+            log.warning(
+                f"Original track: {string_original_track} (URI: {tracks[0]['uri']})"
+            )
+            log.warning(f"Found track: {string_found_track} (URI: {tracks[0]['uri']})")
+        else:
+            log.info(f"Found track: {string_found_track} (URI: {tracks[0]['uri']})")
+
+        return tracks[0]["uri"]
+
+    def create_playlist(self, name: str, description: str) -> str | None:
+        sp = self.client
+        try:
+            user_id = self._call_with_retry(
+                lambda: sp.current_user()["id"], context="getting current user"
+            )
+            playlist = self._call_with_retry(
+                lambda: sp.user_playlist_create(
+                    user=user_id, name=name, public=True, description=description
+                ),
+                context=f"creating playlist '{name}'",
+            )
+            playlist_id = playlist["id"]
+            log.info(f"✅ Created Spotify playlist '{name}' (ID: {playlist_id})")
+            return playlist_id
+        except Exception as e:
+            log.error(f"❌ Failed to create playlist '{name}': {e}")
+            return None
+
+    def add_tracks_to_specific_playlist(
+        self, playlist_id: str, uris: list[str], allowDuplicates: bool = False
+    ) -> None:
+        if not playlist_id:
+            raise ValueError("Missing playlist_id parameter.")
+        if not uris:
+            log.warning("No tracks to add.")
+            return
+
+        unique_uris = list(dict.fromkeys(uris))
+        if len(unique_uris) != len(uris):
+            log.info(
+                f"Removed {len(uris) - len(unique_uris)} duplicate track(s) from input list."
+            )
+
+        sp = self.client
+
+        if allowDuplicates:
+            uris_to_add = unique_uris
+        else:
+            existing_uris = set()
+            offset = 0
+            while True:
+                resp = self._call_with_retry(
+                    lambda: sp.playlist_items(
+                        playlist_id,
+                        fields="items.track.uri,total,next",
+                        additional_types=["track"],
+                        limit=100,
+                        offset=offset,
+                    ),
+                    context=f"fetching playlist items for {playlist_id}",
+                )
+                for item in resp.get("items", []) or []:
+                    track = item.get("track")
+                    if track and "uri" in track:
+                        existing_uris.add(track["uri"])
+                if not resp.get("next"):
+                    break
+                offset += 100
+
+            uris_to_add = [uri for uri in unique_uris if uri not in existing_uris]
+            skipped = len(unique_uris) - len(uris_to_add)
+            if skipped > 0:
+                log.info(f"Skipped {skipped} track(s) already present in the playlist.")
+
+        if not uris_to_add:
+            log.info(
+                "No new tracks to add after filtering existing tracks."
+                if not allowDuplicates
+                else "No tracks to add."
+            )
+            return
+
+        self._call_with_retry(
+            lambda: sp.playlist_add_items(playlist_id, uris_to_add),
+            context=f"adding {len(uris_to_add)} tracks to playlist {playlist_id}",
+        )
+        log.info(f"Added {len(uris_to_add)} track(s) to playlist {playlist_id}.")
+
+    def get_playlist_tracks(self, playlist_id: str) -> list[str]:
+        if not playlist_id:
+            return []
+
+        sp = self.client
+        tracks: list[str] = []
+        offset = 0
+
+        try:
+            while True:
+                response = self._call_with_retry(
+                    lambda: sp.playlist_items(
+                        playlist_id,
+                        fields="items.track.uri,total,next",
+                        additional_types=["track"],
+                        limit=100,
+                        offset=offset,
+                    ),
+                    context=f"fetching playlist tracks for {playlist_id}",
+                )
+                items = response.get("items") or []
+                for item in items:
+                    track = item.get("track")
+                    if track and "uri" in track:
+                        tracks.append(track["uri"])
+                if not response.get("next"):
+                    break
+                offset += 100
+            return tracks
+        except Exception as e:
+            log.error(
+                f"❌ Failed to retrieve playlist tracks for {playlist_id}: {e}",
+                exc_info=True,
+            )
+            return []
+
+    def find_playlist_by_name(self, name: str):
+        try:
+            sp = (
+                self._client_from_refresh()
+                if config.SPOTIPY_REFRESH_TOKEN
+                else self.client
+            )
+            results = self._call_with_retry(
+                lambda: sp.current_user_playlists(limit=50), context="listing playlists"
+            )
+
+            for playlist in results.get("items", []) or []:
+                if playlist.get("name") == name:
+                    log.info(
+                        f"✅ Match found: {playlist.get('name')} (ID={playlist.get('id')})"
+                    )
+                    return {"id": playlist["id"], "data": playlist}
+
+            log.warning(f"⚠️ No playlist found with name '{name}'")
+            return None
+        except Exception as e:
+            log.error(
+                f"❌ Exception while searching for playlist '{name}': {e}",
+                exc_info=True,
+            )
+            return None
+
+    def trim_playlist_to_limit(self, limit: int = 200) -> None:
+        if not config.SPOTIFY_PLAYLIST_ID:
+            raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
+
+        sp = self.client
+        current = self._call_with_retry(
+            lambda: sp.playlist_items(
+                config.SPOTIFY_PLAYLIST_ID,
+                fields="items.track.uri,total",
+                additional_types=["track"],
+            ),
+            context="fetching current playlist items",
+        )
+        total = current["total"]
+        if total <= limit:
+            log.info(f"Playlist is within limit ({total}/{limit}); no tracks removed.")
+            return
+
+        num_to_remove = total - limit
+        uris_to_remove = [
+            item["track"]["uri"] for item in current["items"][:num_to_remove]
+        ]
+        self._call_with_retry(
+            lambda: sp.playlist_remove_all_occurrences_of_items(
+                config.SPOTIFY_PLAYLIST_ID, uris_to_remove
+            ),
+            context=f"removing {num_to_remove} tracks",
+        )
+        log.info(f"Removed {len(uris_to_remove)} old tracks to stay under {limit}.")
+
+
+def get_spotify_client() -> Spotify:
+    """Return Spotify client, preferring refresh-token flow in CI."""
+    global _spotify_api
+    if _spotify_api is None:
+        _spotify_api = SpotifyAPI.from_env()
+    return _spotify_api.client
+
+
+def get_spotify_client_from_refresh() -> Spotify:
+    global _spotify_api
+    if _spotify_api is None:
+        _spotify_api = SpotifyAPI.from_env()
+    return _spotify_api._client_from_refresh()
+
+
+# --- Singleton accessor for SpotifyAPI ---
+
+
+def _get_api() -> SpotifyAPI:
+    global _spotify_api
+    if _spotify_api is None:
+        _spotify_api = SpotifyAPI.from_env()
+    return _spotify_api
+
+
+def search_track(artist: str, title: str) -> str | None:
+    return _get_api().search_track(artist, title)
 
 
 def trim_playlist_to_limit(limit: int = 200) -> None:
-    log.debug(f"Called with limit={limit}")
-    if not config.SPOTIFY_PLAYLIST_ID:
-        log.critical("Missing SPOTIFY_PLAYLIST_ID environment variable.")
-        raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
-    sp = get_spotify_client()
-    current = sp.playlist_items(
-        config.SPOTIFY_PLAYLIST_ID,
-        fields="items.track.uri,total",
-        additional_types=["track"],
-    )
-    total = current["total"]
-    log.info(f"Playlist size: {total}, limit: {limit}")
-    if total <= limit:
-        log.info(f"Playlist is within limit ({total}/{limit}); no tracks removed.")
-        return
-    num_to_remove = total - limit
-    uris_to_remove = [item["track"]["uri"] for item in current["items"][:num_to_remove]]
-    log.info(
-        f"Removing {num_to_remove} tracks from playlist ID {config.SPOTIFY_PLAYLIST_ID}."
-    )
-    sp.playlist_remove_all_occurrences_of_items(
-        config.SPOTIFY_PLAYLIST_ID, uris_to_remove
-    )
-    log.info(f"Removed {len(uris_to_remove)} old tracks to stay under {limit}.")
+    _get_api().trim_playlist_to_limit(limit)
 
 
 def create_playlist(
     name: str,
     description: str = "Generated automatically by Deejay Marvel Automation Tools. Spreadsheets of history, and song not found on Spotify can be found at www.kaianolevine.com/dj-marvel",
 ) -> str | None:
-    """
-    Create a new Spotify playlist with the given name.
-    Returns the playlist ID on success, or None on failure.
-    """
-    sp = get_spotify_client()
-    try:
-        user_id = sp.current_user()["id"]
-        playlist = sp.user_playlist_create(
-            user=user_id, name=name, public=True, description=description
-        )
-        playlist_id = playlist["id"]
-        log.info(f"✅ Created Spotify playlist '{name}' (ID: {playlist_id})")
-        return playlist_id
-    except Exception as e:
-        log.error(f"❌ Failed to create playlist '{name}': {e}")
-        return None
+    return _get_api().create_playlist(name, description)
 
 
 def add_tracks_to_playlist(uris: list[str], allowDuplicates: bool = False) -> None:
-    add_tracks_to_specific_playlist(
+    _get_api().add_tracks_to_specific_playlist(
         config.SPOTIFY_PLAYLIST_ID, uris, allowDuplicates=allowDuplicates
     )
 
@@ -249,186 +434,14 @@ def add_tracks_to_playlist(uris: list[str], allowDuplicates: bool = False) -> No
 def add_tracks_to_specific_playlist(
     playlist_id: str, uris: list[str], allowDuplicates: bool = False
 ) -> None:
-    log.debug(f"Called with uris={uris} and allowDuplicates={allowDuplicates}")
-    if not playlist_id:
-        log.critical("Missing playlist_id parameter.")
-        raise ValueError("Missing playlist_id parameter.")
-    if not uris:
-        log.warning("No tracks to add.")
-        return
-
-    # Remove duplicates in the provided list, preserving order
-    unique_uris = list(dict.fromkeys(uris))
-    duplicates_removed = len(uris) - len(unique_uris)
-    if duplicates_removed > 0:
-        log.info(f"Removed {duplicates_removed} duplicate track(s) from input list.")
-
-    sp = get_spotify_client()
-
-    if allowDuplicates:
-        # Add all unique URIs without checking existing playlist content
-        uris_to_add = unique_uris
-        log.info(
-            f"Adding {len(uris_to_add)} tracks to playlist ID {playlist_id} allowing duplicates."
-        )
-    else:
-        # Fetch all current track URIs from the playlist, paginated
-        existing_uris = set()
-        offset = 0
-        while True:
-            resp = sp.playlist_items(
-                playlist_id,
-                fields="items.track.uri,total,next",
-                additional_types=["track"],
-                limit=100,
-                offset=offset,
-            )
-            items = resp.get("items", [])
-            for item in items:
-                track = item.get("track")
-                if track and "uri" in track:
-                    existing_uris.add(track["uri"])
-            if not resp.get("next"):
-                break
-            offset += 100
-
-        # Filter out URIs that are already in the playlist
-        uris_to_add = [uri for uri in unique_uris if uri not in existing_uris]
-        skipped = len(unique_uris) - len(uris_to_add)
-        if skipped > 0:
-            log.info(f"Skipped {skipped} track(s) already present in the playlist.")
-
-        log.info(
-            f"Adding {len(uris_to_add)} tracks to playlist ID {playlist_id} without allowing duplicates."
-        )
-
-    if not uris_to_add:
-        log.info(
-            "No new tracks to add after filtering existing tracks."
-            if not allowDuplicates
-            else "No tracks to add."
-        )
-        return
-
-    sp.playlist_add_items(playlist_id, uris_to_add)
-    log.info(f"Added {len(uris_to_add)} track(s) to playlist {playlist_id}.")
+    _get_api().add_tracks_to_specific_playlist(
+        playlist_id, uris, allowDuplicates=allowDuplicates
+    )
 
 
 def find_playlist_by_name(name: str):
-    """Return a dict with playlist ID and metadata if a playlist exists with the given name."""
-    log.debug(f"Searching for playlist: {name}")
-
-    try:
-        sp = get_spotify_client_from_refresh()
-        log.debug("Spotify client initialized.")
-        results = sp.current_user_playlists(limit=50)
-
-        total = results.get("total", "unknown")
-        log.debug(
-            f"Retrieved {len(results.get('items', []))} playlists (total={total})"
-        )
-
-        # Log each playlist name to confirm what Spotify returned
-        for playlist in results.get("items", []):
-            log.debug(
-                f"Found playlist: {playlist.get('name')} (ID={playlist.get('id')})"
-            )
-
-            if playlist.get("name") == name:
-                log.info(
-                    f"✅ Match found: {playlist.get('name')} (ID={playlist.get('id')})"
-                )
-                return {"id": playlist["id"], "data": playlist}
-
-        log.warning(f"⚠️ No playlist found with name '{name}'")
-        return None
-
-    except Exception as e:
-        log.error(
-            f"❌ Exception while searching for playlist '{name}': {e}", exc_info=True
-        )
-        return None
+    return _get_api().find_playlist_by_name(name)
 
 
 def get_playlist_tracks(playlist_id: str) -> list[str]:
-    """
-    Retrieve all track URIs from a specific Spotify playlist.
-    Returns a list of track URIs.
-    """
-    log.debug(f"Fetching tracks for playlist_id={playlist_id}")
-    if not playlist_id:
-        log.warning("No playlist_id provided; returning empty list.")
-        return []
-
-    try:
-        sp = get_spotify_client()
-        log.debug(f"Spotify client initialized for playlist_id={playlist_id}")
-    except Exception as e:
-        log.error(
-            f"Failed to initialize Spotify client for playlist_id={playlist_id}: {e}",
-            exc_info=True,
-        )
-        return []
-
-    tracks = []
-    offset = 0
-
-    try:
-        while True:
-            response = sp.playlist_items(
-                playlist_id,
-                fields="items.track.uri,total,next",
-                additional_types=["track"],
-                limit=100,
-                offset=offset,
-            )
-            if not isinstance(response, dict):
-                log.error(
-                    f"Unexpected response type for playlist_id={playlist_id}: {type(response)}"
-                )
-                break
-
-            items = response.get("items")
-            total = response.get("total")
-            next_page = response.get("next")
-
-            if items is None or total is None:
-                log.error(
-                    f"Missing 'items' or 'total' in response for playlist_id={playlist_id}"
-                )
-                break
-
-            log.debug(
-                f"Retrieved batch of {len(items)} items at offset {offset} for playlist_id={playlist_id}, total expected: {total}"
-            )
-
-            uris = []
-            for item in items:
-                track = item.get("track")
-                if track and "uri" in track:
-                    uris.append(track["uri"])
-                else:
-                    log.debug(
-                        f"Skipping item without valid track or URI at offset {offset} for playlist_id={playlist_id}"
-                    )
-
-            tracks.extend(uris)
-            log.debug(
-                f"Added {len(uris)} track URIs from current batch for playlist_id={playlist_id}"
-            )
-
-            if not next_page:
-                log.debug(f"No more pages to fetch for playlist_id={playlist_id}")
-                break
-
-            offset += 100
-
-        log.info(f"Total tracks retrieved: {len(tracks)} for playlist_id={playlist_id}")
-        return tracks
-
-    except Exception as e:
-        log.error(
-            f"❌ Failed to retrieve playlist tracks for {playlist_id}: {e}",
-            exc_info=True,
-        )
-        return []
+    return _get_api().get_playlist_tracks(playlist_id)

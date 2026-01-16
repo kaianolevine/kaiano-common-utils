@@ -335,3 +335,25 @@ class DriveFacade:
         except Exception as e:
             log.error(f"Failed to download .m3u file with ID {file_id}: {e}")
             return []
+
+    def create_spreadsheet_in_folder(self, name: str, folder_id: str) -> str:
+        """Create a Google Sheet in the given Drive folder and return its file ID."""
+        body = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+            "parents": [folder_id],
+        }
+
+        created = execute_with_retry(
+            lambda: self._service.files()
+            .create(
+                body=body,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute(),
+            context=f"creating spreadsheet '{name}' in folder {folder_id}",
+            retry=self._retry,
+        )
+
+        return created["id"]
