@@ -177,6 +177,7 @@ class SheetsFacade:
         ]
         return self.batch_update(spreadsheet_id, requests)
 
+    @staticmethod
     def get_range_format(
         start_col: str, start_row: int, end_col: str, end_row: int | None = None
     ) -> str:
