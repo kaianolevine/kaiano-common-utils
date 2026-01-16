@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
+from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
 
 from ._retry import RetryConfig, execute_with_retry
@@ -250,3 +251,87 @@ class DriveFacade:
             context=f"deleting file {file_id}",
             retry=self._retry,
         )
+
+    def get_all_m3u_files(self) -> list[dict]:
+        """Return all VirtualDJ history .m3u files (newest-first).
+
+        Matches legacy `kaiano_common_utils.m3u_parsing.get_all_m3u_files(drive_service)`.
+
+        Returns a list of dicts containing at least: {"id": str, "name": str}.
+        Sorting is by filename. With date-prefixed filenames (YYYY-MM-DD.m3u), this
+        yields correct chronological order.
+        """
+
+        if not getattr(config, "VDJ_HISTORY_FOLDER_ID", None):
+            log.critical("VDJ_HISTORY_FOLDER_ID is not set in config.")
+            return []
+
+        try:
+            files = self.list_files(
+                config.VDJ_HISTORY_FOLDER_ID,
+                name_contains=".m3u",
+                trashed=False,
+                include_folders=False,
+            )
+
+            files.sort(key=lambda f: f.name or "")
+            files = list(reversed(files))
+
+            return [{"id": f.id, "name": f.name} for f in files]
+        except Exception as e:
+            log.error(f"Failed to list .m3u files: {e}")
+            return []
+
+    def get_most_recent_m3u_file(self) -> dict | None:
+        """Return the most recent .m3u file.
+
+        Matches legacy `kaiano_common_utils.m3u_parsing.get_most_recent_m3u_file(drive_service)`.
+
+        Returns a dict with keys: {"id", "name"} or None.
+        """
+
+        if not getattr(config, "VDJ_HISTORY_FOLDER_ID", None):
+            log.critical("VDJ_HISTORY_FOLDER_ID is not set in config.")
+            return None
+
+        try:
+            files = self.list_files(
+                config.VDJ_HISTORY_FOLDER_ID,
+                name_contains=".m3u",
+                trashed=False,
+                include_folders=False,
+            )
+
+            if not files:
+                return None
+
+            files.sort(key=lambda f: f.name or "")
+            f = files[-1]
+            return {"id": f.id, "name": f.name}
+        except Exception as e:
+            log.error(f"Failed to find most recent .m3u file: {e}")
+            return None
+
+    def download_m3u_file_data(
+        self, file_id: str, *, encoding: str = "utf-8"
+    ) -> list[str]:
+        """Download a .m3u file and return its lines."""
+
+        try:
+            # The initial request creation can fail; download itself is chunked.
+            request = execute_with_retry(
+                lambda: self._service.files().get_media(fileId=file_id),
+                context=f"creating download request for file {file_id}",
+                retry=self._retry,
+            )
+
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                _status, done = downloader.next_chunk()
+
+            return fh.getvalue().decode(encoding).splitlines()
+        except Exception as e:
+            log.error(f"Failed to download .m3u file with ID {file_id}: {e}")
+            return []
