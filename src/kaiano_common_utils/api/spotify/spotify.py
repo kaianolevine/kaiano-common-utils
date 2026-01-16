@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 
 import requests
@@ -35,7 +37,7 @@ def _sleep_for_rate_limit(e: SpotifyException, default_seconds: int = 2) -> None
     time.sleep(max(1, retry_after))
 
 
-_spotify_api: "SpotifyAPI" | None = None
+_spotify_api: SpotifyAPI | None = None
 
 
 class NoopCacheHandler(CacheHandler):
