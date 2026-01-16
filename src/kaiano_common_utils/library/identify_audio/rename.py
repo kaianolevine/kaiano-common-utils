@@ -2,20 +2,30 @@ import os
 
 
 class RenameFacade:
-    def propose(self, path, *, title=None, artist=None, template="{title}_{artist}"):
-        base = os.path.dirname(path)
-        name = os.path.basename(path)
-        root, ext = os.path.splitext(name)
+    def apply(self, path: str, update, *, template: str = "{title}_{artist}") -> str:
+        """Rename a local file based on metadata.
 
-        if title and artist:
-            new_name = template.format(title=title, artist=artist) + ext
-        else:
-            new_name = name
+        This is a convenience wrapper around propose+os.rename.
+        - `update` is expected to have `.title` and `.artist` attributes.
+        - Returns the final path (may be unchanged if we cannot build a safe name).
+        """
 
-        return path, os.path.join(base, new_name), new_name
+        proposal = self.propose(
+            path,
+            title=getattr(update, "title", None),
+            artist=getattr(update, "artist", None),
+            template=template,
+        )
 
-    def apply(self, proposal):
-        src, dst, _ = proposal
+        # Support either tuple-based proposals or RenameProposal dataclass.
+        try:
+            src = proposal.src_path
+            dst = proposal.dest_path
+        except Exception:
+            src, dst, _ = proposal
+
         if src != dst:
             os.rename(src, dst)
-        return dst
+            return dst
+
+        return src
