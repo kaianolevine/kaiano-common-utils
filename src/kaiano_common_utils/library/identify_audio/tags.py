@@ -13,4 +13,6 @@ class TagFacade:
         )
 
     def dump(self, path):
+        if hasattr(self._io, "dump_tags"):
+            return self._io.dump_tags(path)
         return self._io.dump(path)
