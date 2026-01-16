@@ -42,7 +42,8 @@ class DriveFacade:
         if mime_type:
             query += f" and mimeType = '{mime_type}'"
         if name_contains:
-            query += f" and name contains '{name_contains}'"
+            safe_name_contains = name_contains.replace("'", "\\'")
+            query += f" and name contains '{safe_name_contains}'"
         query += f" and trashed = {str(trashed).lower()}"
 
         def _call(page_token: str | None):
@@ -84,8 +85,9 @@ class DriveFacade:
         if cache_key in FOLDER_CACHE:
             return FOLDER_CACHE[cache_key]
 
+        safe_name = name.replace("'", "\\'")
         query = (
-            f"'{parent_id}' in parents and name = '{name}' "
+            f"'{parent_id}' in parents and name = '{safe_name}' "
             "and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         )
 
