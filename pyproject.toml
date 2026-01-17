@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "kaiano"
+name = "kaiano_common_utils"
 version = "0.1.18"
 description = "Common utility functions shared across Kaiano’s projects."
 authors = ["Kaiano Levine <kaiano@example.com>"]
@@ -44,7 +44,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.coverage.run]
 branch = true
-source = ["kaiano"]
+source = ["kaiano_common_utils"]
 
 [tool.coverage.report]
 fail_under = 90
