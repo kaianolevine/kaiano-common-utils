@@ -5,8 +5,40 @@ from googleapiclient.errors import HttpError
 
 from kaiano_common_utils import logger as log
 
-from . import sheets as google_sheets
+from ._auth import AuthConfig, build_sheets_service, load_credentials
 from ._retry import is_retryable_http_error
+
+# -----------------------------------------------------------------------------
+# Local service / metadata helpers
+# -----------------------------------------------------------------------------
+
+
+def _get_sheets_service(auth: AuthConfig | None = None, sheets_service=None):
+    """Return an authorized googleapiclient Sheets service.
+
+    We intentionally keep this module self-contained so it does not depend on
+    legacy helpers living in `kaiano_common_utils.api.google.sheets`.
+    """
+    if sheets_service is not None:
+        return sheets_service
+    creds = load_credentials(auth)
+    return build_sheets_service(creds)
+
+
+def _get_sheet_id_by_name(sheets_service, spreadsheet_id: str, sheet_name: str) -> int:
+    """Resolve a sheetId from a sheet title."""
+    meta = _execute_with_http_retry(
+        lambda: sheets_service.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id)
+        .execute(),
+        operation=f"fetching spreadsheet metadata for {spreadsheet_id}",
+        max_attempts=5,
+    )
+    for sheet in meta.get("sheets", []):
+        props = sheet.get("properties", {})
+        if props.get("title") == sheet_name:
+            return int(props["sheetId"])
+    raise ValueError(f"Sheet '{sheet_name}' not found in spreadsheet {spreadsheet_id}")
 
 
 def hex_to_rgb(hex_color: str) -> Dict[str, float]:
@@ -144,7 +176,7 @@ class SheetsFormatting:
 
     @staticmethod
     def _service(sheets_service=None):
-        return sheets_service or google_sheets.get_sheets_service()
+        return _get_sheets_service(sheets_service=sheets_service)
 
     # --- High level helpers ---
 
@@ -415,7 +447,7 @@ def apply_sheet_formatting(sheet):
     try:
         spreadsheet_id = sheet.spreadsheet.id
         sheet_id = sheet.id
-        sheets_service = google_sheets.get_sheets_service()
+        sheets_service = _get_sheets_service()
 
         # Use metadata-provided column count instead of reading values (saves quota).
         # gspread Worksheet exposes `col_count` which is backed by sheet properties.
@@ -522,7 +554,7 @@ def apply_formatting_to_sheet(spreadsheet_id):
 
     log.debug(f"Applying formatting to all sheets in spreadsheet ID: {spreadsheet_id}")
 
-    sheets_service = google_sheets.get_sheets_service()
+    sheets_service = _get_sheets_service()
 
     try:
         meta = _execute_with_http_retry(
@@ -1034,7 +1066,7 @@ def set_sheet_formatting(
     - Set background colors for data rows
     - Auto resize columns
     """
-    sheets_service = google_sheets.get_sheets_service()
+    sheets_service = _get_sheets_service()
     requests = []
 
     # Freeze header rows
@@ -1390,9 +1422,7 @@ def format_summary_sheet(
         header (List[str]): The list of column headers (used for column count).
         rows (List[List[Any]]): The data rows (used for row count).
     """
-    sheet_id = google_sheets.get_sheet_id_by_name(
-        sheet_service, spreadsheet_id, sheet_name
-    )
+    sheet_id = _get_sheet_id_by_name(sheet_service, spreadsheet_id, sheet_name)
     log.debug(
         f"Formatting summary sheet '{sheet_name}' (sheetId={sheet_id}) in spreadsheet {spreadsheet_id}"
     )
