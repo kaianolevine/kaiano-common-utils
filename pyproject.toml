@@ -5,7 +5,7 @@ description = "Common utility functions shared across Kaiano’s projects."
 authors = ["Kaiano Levine <kaiano@example.com>"]
 license = "MIT"
 readme = "README.md"
-packages = [{ include = "kaiano_common_utils", from = "src" }]
+packages = [{ include = "kaiano_common_utils", from = "src" },  {include = "kaiano", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
