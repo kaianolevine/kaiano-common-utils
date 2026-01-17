@@ -113,6 +113,205 @@ def _get_column_pixel_sizes(
     return out
 
 
+class SheetsFormatting:
+    """Static wrapper for this module’s formatting utilities.
+
+    This is intentionally *stateless*: each method operates on the provided
+    spreadsheet/service arguments. This keeps usage simple and avoids any hidden
+    state (spreadsheet IDs, cached services, etc.).
+
+    Module-level functions remain available for backwards compatibility.
+    """
+
+    @staticmethod
+    def _service(sheets_service=None):
+        return sheets_service or google_sheets.get_sheets_service()
+
+    # --- High level helpers ---
+
+    @staticmethod
+    def apply_to_spreadsheet(spreadsheet_id: str, *, sheets_service=None) -> None:
+        apply_formatting_to_sheet(spreadsheet_id)
+
+    @staticmethod
+    def apply_to_gspread_sheet(sheet) -> None:
+        apply_sheet_formatting(sheet)
+
+    # --- Thin wrappers around existing module functions ---
+
+    @staticmethod
+    def set_values(
+        spreadsheet_id: str,
+        sheet_name: str,
+        start_row: int,
+        start_col: int,
+        values,
+        *,
+        force_text: bool = True,
+        sheets_service=None,
+    ) -> None:
+        set_values(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_name,
+            start_row,
+            start_col,
+            values,
+            force_text=force_text,
+        )
+
+    @staticmethod
+    def set_bold_font(
+        spreadsheet_id: str,
+        sheet_id: int,
+        start_row: int,
+        end_row: int,
+        start_col: int,
+        end_col: int,
+        *,
+        sheets_service=None,
+    ) -> None:
+        set_bold_font(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_id,
+            start_row,
+            end_row,
+            start_col,
+            end_col,
+        )
+
+    @staticmethod
+    def freeze_rows(
+        spreadsheet_id: str,
+        sheet_id: int,
+        num_rows: int,
+        *,
+        sheets_service=None,
+    ) -> None:
+        freeze_rows(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_id,
+            num_rows,
+        )
+
+    @staticmethod
+    def set_horizontal_alignment(
+        spreadsheet_id: str,
+        sheet_id: int,
+        start_row: int,
+        end_row: int,
+        start_col: int,
+        end_col: int,
+        *,
+        alignment: str = "LEFT",
+        sheets_service=None,
+    ) -> None:
+        set_horizontal_alignment(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_id,
+            start_row,
+            end_row,
+            start_col,
+            end_col,
+            alignment=alignment,
+        )
+
+    @staticmethod
+    def set_number_format(
+        spreadsheet_id: str,
+        sheet_id: int,
+        start_row: int,
+        end_row: int,
+        start_col: int,
+        end_col: int,
+        format_str,
+        *,
+        sheets_service=None,
+    ) -> None:
+        set_number_format(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_id,
+            start_row,
+            end_row,
+            start_col,
+            end_col,
+            format_str,
+        )
+
+    @staticmethod
+    def auto_resize_columns(
+        spreadsheet_id: str,
+        sheet_id: int,
+        *,
+        start_col: int = 1,
+        end_col: Optional[int] = None,
+        sheets_service=None,
+    ) -> None:
+        auto_resize_columns(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_id,
+            start_col,
+            end_col,
+        )
+
+    @staticmethod
+    def set_column_text_formatting(
+        spreadsheet_id: str,
+        sheet_name: str,
+        column_indexes,
+        *,
+        sheets_service=None,
+    ) -> None:
+        set_column_text_formatting(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_name,
+            column_indexes,
+        )
+
+    @staticmethod
+    def reorder_sheets(
+        spreadsheet_id: str,
+        sheet_names_in_order: List[str],
+        spreadsheet_metadata: Dict,
+        *,
+        sheets_service=None,
+    ) -> None:
+        reorder_sheets(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_names_in_order,
+            spreadsheet_metadata,
+        )
+
+    @staticmethod
+    def format_summary_sheet(
+        spreadsheet_id: str,
+        sheet_name: str,
+        header: List[str],
+        rows: List[List[Any]],
+        *,
+        sheets_service=None,
+    ) -> None:
+        format_summary_sheet(
+            SheetsFormatting._service(sheets_service),
+            spreadsheet_id,
+            sheet_name,
+            header,
+            rows,
+        )
+
+    @staticmethod
+    def formatter(spreadsheet_id: str, *, sheets_service=None) -> "SheetFormatter":
+        """Return the optional convenience SheetFormatter for a spreadsheet."""
+        return SheetFormatter(SheetsFormatting._service(sheets_service), spreadsheet_id)
+
+
 def apply_sheet_formatting(sheet):
     """Apply lightweight formatting to a gspread Worksheet with minimal API calls.
 
