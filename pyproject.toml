@@ -6,7 +6,6 @@ authors = ["Kaiano Levine <kaiano@example.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [
-  { include = "kaiano", from = "src" },
   { include = "kaiano_common_utils", from = "src" }
 ]
 
