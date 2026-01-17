@@ -5,10 +5,11 @@ from googleapiclient.errors import HttpError
 
 from kaiano_common_utils import logger as log
 
-from ..google import sheets as google_sheets
+from . import sheets as google_sheets
+from ._retry import is_retryable_http_error
 
 
-def hex_to_rgb(hex_color):
+def hex_to_rgb(hex_color: str) -> Dict[str, float]:
     hex_color = hex_color.lstrip("#")
     if len(hex_color) == 6 and all(c in "0123456789abcdefABCDEF" for c in hex_color):
         r, g, b = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
@@ -17,23 +18,6 @@ def hex_to_rgb(hex_color):
     else:
         r, g, b = (255, 255, 255)
     return {"red": r / 255, "green": g / 255, "blue": b / 255}
-
-
-# --- Helper functions for quota-friendly, robust formatting ---
-def _http_status(err: Exception) -> Optional[int]:
-    """Best-effort extraction of HTTP status code from googleapiclient HttpError."""
-    try:
-        if isinstance(err, HttpError) and getattr(err, "resp", None) is not None:
-            return int(getattr(err.resp, "status", 0))
-    except Exception:
-        return None
-    return None
-
-
-def _is_retryable_http_error(err: Exception) -> bool:
-    """Return True for transient/retryable Google API errors."""
-    status = _http_status(err)
-    return status in {429, 500, 502, 503, 504}
 
 
 def _batch_update_with_retry(
@@ -60,10 +44,12 @@ def _batch_update_with_retry(
             return
         except Exception as e:
             last_err = e
-            if not _is_retryable_http_error(e) or attempt >= max_attempts:
+
+            retryable = isinstance(e, HttpError) and is_retryable_http_error(e)
+            if not retryable or attempt >= max_attempts:
                 raise
 
-            status = _http_status(e)
+            status = getattr(getattr(e, "resp", None), "status", None)
             log.warning(
                 f"⚠️ {operation} hit retryable error (HTTP {status}) on attempt {attempt}/{max_attempts}. "
                 f"Backing off for {delay_s:.1f}s..."
@@ -76,6 +62,37 @@ def _batch_update_with_retry(
         raise last_err
 
 
+# --- Helper for conservative retry on .execute() calls ---
+def _execute_with_http_retry(fn, *, operation: str, max_attempts: int = 5) -> Any:
+    """Execute a Google API call with conservative backoff for retryable HttpError."""
+
+    delay_s = 1.0
+    last_err: Optional[Exception] = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last_err = e
+
+            retryable = isinstance(e, HttpError) and is_retryable_http_error(e)
+            if not retryable or attempt >= max_attempts:
+                raise
+
+            status = getattr(getattr(e, "resp", None), "status", None)
+            log.warning(
+                f"⚠️ {operation} hit retryable error (HTTP {status}) on attempt {attempt}/{max_attempts}. "
+                f"Backing off for {delay_s:.1f}s..."
+            )
+            time.sleep(delay_s)
+            delay_s = min(delay_s * 2, 16.0)
+
+    if last_err:
+        raise last_err
+
+    raise RuntimeError(f"Unknown error in {operation}")
+
+
 # --- Helper: get column pixel sizes for all sheets in a spreadsheet ---
 def _get_column_pixel_sizes(
     sheets_service,
@@ -85,14 +102,16 @@ def _get_column_pixel_sizes(
 
     We keep fields tight to avoid large payloads.
     """
-    meta = (
-        sheets_service.spreadsheets()
+    meta = _execute_with_http_retry(
+        lambda: sheets_service.spreadsheets()
         .get(
             spreadsheetId=spreadsheet_id,
             includeGridData=True,
             fields="sheets(properties(sheetId,title),data(columnMetadata(pixelSize)))",
         )
-        .execute()
+        .execute(),
+        operation=f"fetching column pixel sizes for {spreadsheet_id}",
+        max_attempts=5,
     )
 
     out: Dict[int, List[Optional[int]]] = {}
@@ -130,7 +149,7 @@ class SheetsFormatting:
     # --- High level helpers ---
 
     @staticmethod
-    def apply_to_spreadsheet(spreadsheet_id: str, *, sheets_service=None) -> None:
+    def apply_to_spreadsheet(spreadsheet_id: str) -> None:
         apply_formatting_to_sheet(spreadsheet_id)
 
     @staticmethod
@@ -312,6 +331,78 @@ class SheetsFormatting:
         return SheetFormatter(SheetsFormatting._service(sheets_service), spreadsheet_id)
 
 
+# --- Higher-level / opinionated formatting recipes namespace ---
+class SheetsFormattingPresets:
+    """Static wrappers for higher-level / opinionated formatting recipes.
+
+    Use this when you want the module's "do-the-whole-thing" helpers rather than the
+    low-level primitives in `SheetsFormatting`.
+
+    These methods intentionally keep the existing module-level functions as the
+    source of truth (no behavior changes), but provide a discoverable namespace.
+    """
+
+    @staticmethod
+    def apply_formatting_to_sheet(spreadsheet_id: str) -> None:
+        """Apply standard formatting to all sheets in a spreadsheet."""
+        apply_formatting_to_sheet(spreadsheet_id)
+
+    @staticmethod
+    def apply_sheet_formatting(sheet) -> None:
+        """Apply lightweight formatting to a single gspread Worksheet."""
+        apply_sheet_formatting(sheet)
+
+    @staticmethod
+    def set_sheet_formatting(
+        spreadsheet_id: str,
+        sheet_id: int,
+        header_row_count: int,
+        total_rows: int,
+        total_cols: int,
+        backgrounds,
+    ) -> None:
+        """Apply the module's legacy per-sheet formatting recipe."""
+        set_sheet_formatting(
+            spreadsheet_id,
+            sheet_id,
+            header_row_count,
+            total_rows,
+            total_cols,
+            backgrounds,
+        )
+
+    @staticmethod
+    def set_column_formatting(
+        sheets_service,
+        spreadsheet_id: str,
+        sheet_name: str,
+        num_columns: int,
+    ) -> None:
+        """Apply the module's legacy per-column formatting recipe."""
+        set_column_formatting(sheets_service, spreadsheet_id, sheet_name, num_columns)
+
+    @staticmethod
+    def update_sheet_values(
+        sheets_service,
+        spreadsheet_id: str,
+        sheet_name: str,
+        values,
+    ) -> None:
+        """Update values starting at A1 using USER_ENTERED (legacy helper)."""
+        update_sheet_values(sheets_service, spreadsheet_id, sheet_name, values)
+
+    @staticmethod
+    def format_summary_sheet(
+        sheets_service,
+        spreadsheet_id: str,
+        sheet_name: str,
+        header: List[str],
+        rows: List[List[Any]],
+    ) -> None:
+        """Apply the summary-sheet formatting recipe."""
+        format_summary_sheet(sheets_service, spreadsheet_id, sheet_name, header, rows)
+
+
 def apply_sheet_formatting(sheet):
     """Apply lightweight formatting to a gspread Worksheet with minimal API calls.
 
@@ -434,7 +525,13 @@ def apply_formatting_to_sheet(spreadsheet_id):
     sheets_service = google_sheets.get_sheets_service()
 
     try:
-        meta = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        meta = _execute_with_http_retry(
+            lambda: sheets_service.spreadsheets()
+            .get(spreadsheetId=spreadsheet_id)
+            .execute(),
+            operation=f"fetching spreadsheet metadata for {spreadsheet_id}",
+            max_attempts=5,
+        )
         sheets = meta.get("sheets", [])
         log.debug(f"Found {len(sheets)} sheet(s) to format")
 
@@ -685,12 +782,19 @@ def set_values(
         ]
         value_input = "RAW"
     body = {"values": prepared}
-    sheets_service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=range_name,
-        valueInputOption=value_input,
-        body=body,
-    ).execute()
+    _execute_with_http_retry(
+        lambda: sheets_service.spreadsheets()
+        .values()
+        .update(
+            spreadsheetId=spreadsheet_id,
+            range=range_name,
+            valueInputOption=value_input,
+            body=body,
+        )
+        .execute(),
+        operation=f"updating values {range_name} in {spreadsheet_id}",
+        max_attempts=5,
+    )
 
 
 def set_bold_font(
@@ -714,10 +818,13 @@ def set_bold_font(
             }
         }
     ]
-    body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body=body
-    ).execute()
+    _batch_update_with_retry(
+        sheets_service,
+        spreadsheet_id,
+        requests,
+        operation="set_bold_font",
+        max_attempts=5,
+    )
 
 
 def freeze_rows(sheets_service, spreadsheet_id, sheet_id, num_rows):
@@ -735,10 +842,13 @@ def freeze_rows(sheets_service, spreadsheet_id, sheet_id, num_rows):
             }
         }
     ]
-    body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body=body
-    ).execute()
+    _batch_update_with_retry(
+        sheets_service,
+        spreadsheet_id,
+        requests,
+        operation="freeze_rows",
+        max_attempts=5,
+    )
 
 
 def set_horizontal_alignment(
@@ -769,10 +879,13 @@ def set_horizontal_alignment(
             }
         }
     ]
-    body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body=body
-    ).execute()
+    _batch_update_with_retry(
+        sheets_service,
+        spreadsheet_id,
+        requests,
+        operation="set_horizontal_alignment",
+        max_attempts=5,
+    )
 
 
 def set_number_format(
@@ -816,10 +929,13 @@ def set_number_format(
             }
         }
     ]
-    body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body=body
-    ).execute()
+    _batch_update_with_retry(
+        sheets_service,
+        spreadsheet_id,
+        requests,
+        operation="set_number_format",
+        max_attempts=5,
+    )
 
 
 def auto_resize_columns(
@@ -880,9 +996,13 @@ def auto_resize_columns(
             ]
         }
 
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id, body=body
-        ).execute()
+        _batch_update_with_retry(
+            service,
+            spreadsheet_id,
+            body["requests"],
+            operation="auto_resize_columns",
+            max_attempts=5,
+        )
     except HttpError as e:
         log.error(
             f"Auto-resize columns failed for sheet {sheet_id} cols {start_col}-{end_col}: {e}"
@@ -1022,10 +1142,13 @@ def set_sheet_formatting(
     )
     # Can't set max width directly via API; auto-resize only.
 
-    body = {"requests": requests}
-    sheets_service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body=body
-    ).execute()
+    _batch_update_with_retry(
+        sheets_service,
+        spreadsheet_id,
+        requests,
+        operation=f"set_sheet_formatting sheetId={sheet_id}",
+        max_attempts=5,
+    )
 
 
 def set_column_formatting(
@@ -1100,10 +1223,13 @@ def set_column_formatting(
             )
 
         if requests:
-            body = {"requests": requests}
-            sheets_service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id, body=body
-            ).execute()
+            _batch_update_with_retry(
+                sheets_service,
+                spreadsheet_id,
+                requests,
+                operation=f"set_column_formatting sheet={sheet_name}",
+                max_attempts=5,
+            )
             log.info("✅ Column formatting set successfully")
     except HttpError as error:
         log.error(f"An error occurred while setting column formatting: {error}")
@@ -1168,9 +1294,13 @@ def set_column_text_formatting(
         )
 
     if requests:
-        sheets_service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id, body={"requests": requests}
-        ).execute()
+        _batch_update_with_retry(
+            sheets_service,
+            spreadsheet_id,
+            requests,
+            operation=f"set_column_text_formatting sheet={sheet_name}",
+            max_attempts=5,
+        )
 
 
 def reorder_sheets(
@@ -1225,10 +1355,13 @@ def reorder_sheets(
             )
             index += 1
         if requests:
-            body = {"requests": requests}
-            sheets_service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id, body=body
-            ).execute()
+            _batch_update_with_retry(
+                sheets_service,
+                spreadsheet_id,
+                requests,
+                operation="reorder_sheets",
+                max_attempts=5,
+            )
             log.info("✅ Sheets reordered successfully")
     except HttpError as error:
         log.error(f"An error occurred while reordering sheets: {error}")
@@ -1259,6 +1392,9 @@ def format_summary_sheet(
     """
     sheet_id = google_sheets.get_sheet_id_by_name(
         sheet_service, spreadsheet_id, sheet_name
+    )
+    log.debug(
+        f"Formatting summary sheet '{sheet_name}' (sheetId={sheet_id}) in spreadsheet {spreadsheet_id}"
     )
     requests = []
 
@@ -1306,21 +1442,6 @@ def format_summary_sheet(
             }
         }
     )
-    # Add buffer to column widths (e.g., 1.2x the auto-sized width, or a fixed pixel size as an approximation)
-    requests.append(
-        {
-            "updateDimensionProperties": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "dimension": "COLUMNS",
-                    "startIndex": 0,
-                    "endIndex": num_columns,
-                },
-                "properties": {"pixelSize": 120},  # Approximate width buffer
-                "fields": "pixelSize",
-            }
-        }
-    )
 
     # Format all cells as plain text
     requests.append(
@@ -1341,9 +1462,53 @@ def format_summary_sheet(
 
     # Send all formatting requests in batch
     try:
-        sheet_service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id, body={"requests": requests}
-        ).execute()
+        _batch_update_with_retry(
+            sheet_service,
+            spreadsheet_id,
+            requests,
+            operation=f"format_summary_sheet sheetId={sheet_id}",
+            max_attempts=5,
+        )
+
+        # --- Column width buffer pass (auto-resize + buffer) ---
+        BUFFER_PX = 20
+        MAX_PX = 350
+
+        pixel_sizes_by_sheet = _get_column_pixel_sizes(sheet_service, spreadsheet_id)
+        sizes = pixel_sizes_by_sheet.get(int(sheet_id), [])
+
+        width_requests: List[Dict[str, Any]] = []
+        if sizes:
+            for col_idx in range(0, min(num_columns, len(sizes))):
+                ps = sizes[col_idx]
+                if ps is None:
+                    continue
+                new_ps = min(int(ps) + BUFFER_PX, MAX_PX)
+                if new_ps <= int(ps):
+                    continue
+                width_requests.append(
+                    {
+                        "updateDimensionProperties": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "COLUMNS",
+                                "startIndex": col_idx,
+                                "endIndex": col_idx + 1,
+                            },
+                            "properties": {"pixelSize": new_ps},
+                            "fields": "pixelSize",
+                        }
+                    }
+                )
+
+        if width_requests:
+            _batch_update_with_retry(
+                sheet_service,
+                spreadsheet_id,
+                width_requests,
+                operation=f"format_summary_sheet column buffer sheetId={sheet_id}",
+                max_attempts=5,
+            )
     except HttpError as e:
         log.error(f"Error formatting summary sheet '{sheet_name}': {e}")
         raise
@@ -1358,7 +1523,13 @@ class SheetFormatter:
     def __init__(self, sheets_service, spreadsheet_id: str):
         self.service = sheets_service
         self.spreadsheet_id = spreadsheet_id
-        meta = self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        meta = _execute_with_http_retry(
+            lambda: self.service.spreadsheets()
+            .get(spreadsheetId=spreadsheet_id)
+            .execute(),
+            operation=f"fetching spreadsheet metadata for {spreadsheet_id}",
+            max_attempts=5,
+        )
         self._title_to_id = {
             s["properties"]["title"]: s["properties"]["sheetId"]
             for s in meta.get("sheets", [])
