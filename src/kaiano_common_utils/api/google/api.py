@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from kaiano_common_utils import logger as log
 
@@ -27,14 +27,14 @@ class GoogleAPI:
     directly.
 
     Example:
-        from kaiano_common_utils.google import GoogleAPI
+        from kaiano_common_utils.api.google import GoogleAPI
         g = GoogleAPI.from_env()
         rows = g.sheets.read_values(spreadsheet_id, "Sheet1!A2:C")
     """
 
     sheets: SheetsFacade
     drive: DriveFacade
-    gspread: Any = None
+    gspread: Any | None = None
 
     @classmethod
     def from_env(
@@ -65,7 +65,7 @@ class GoogleAPI:
         cls,
         credentials_file: str,
         *,
-        scopes: Optional[tuple[str, ...]] = None,
+        scopes: tuple[str, ...] | None = None,
         retry: RetryConfig | None = None,
     ) -> "GoogleAPI":
         auth = AuthConfig(
