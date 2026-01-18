@@ -11,6 +11,6 @@ External code should only import :class:`~kaiano_common_utils.google.GoogleAPI`:
     rows = g.sheets.read_values(spreadsheet_id, "Sheet1!A1:C10")
 """
 
-from .api import GoogleAPI
+from .google import GoogleAPI
 
 __all__ = ["GoogleAPI"]

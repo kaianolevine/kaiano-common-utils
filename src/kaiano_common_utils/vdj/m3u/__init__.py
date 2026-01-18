@@ -6,7 +6,7 @@ Recommended entry point:
 Backwards compatible functions are also exported for existing callers.
 """
 
-from .api import M3UEntry, M3UToolbox
+from .m3u import M3UEntry, M3UToolbox
 
 __all__ = [
     "M3UToolbox",

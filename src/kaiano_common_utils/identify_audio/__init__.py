@@ -7,7 +7,7 @@ Advanced:
 - IdentifyAudio (lower-level orchestrator)
 """
 
-from .api import AudioToolbox
+from .audio_identify import AudioToolbox
 from .identify import IdentifyAudio
 from .policies import IdentificationPolicy, RenamePolicy, TagPolicy
 

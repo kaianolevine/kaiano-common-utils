@@ -2,7 +2,6 @@ import re
 import unicodedata
 from typing import Any, Tuple
 
-from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
 
 log = log.get_logger()
@@ -51,89 +50,6 @@ def normalize_csv(file_path):
     with open(file_path, "w") as f:
         f.write("\n".join(cleaned_lines))
     log.debug(f"✅ Normalized: {file_path}")
-
-
-def normalize_prefixes_in_source(drive):
-    """Remove leading status prefixes from files in the CSV source folder.
-    If a file name starts with 'FAILED_' or 'possible_duplicate_' (case-insensitive),
-    this function will attempt to rename it to the original base name (i.e. strip the prefix).
-    Uses supportsAllDrives=True to operate on shared drives.
-    """
-    FAILED_PREFIX = "FAILED_"
-    POSSIBLE_DUPLICATE_PREFIX = "possible_duplicate_"
-    COPY_OF_PREFIX = "Copy of "
-    try:
-        log.debug("normalize_prefixes_in_source: listing source folder files")
-        resp = (
-            drive.files()
-            .list(
-                q=f"'{config.CSV_SOURCE_FOLDER_ID}' in parents and trashed = false",
-                spaces="drive",
-                fields="nextPageToken, files(id, name)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute()
-        )
-        files = resp.get("files", [])
-        log.debug(f"normalize_prefixes_in_source: found {len(files)} files to inspect")
-
-        for f in files:
-            original_name = f.get("name", "")
-            lower = original_name.lower()
-            prefix = None
-            if lower.startswith(FAILED_PREFIX.lower()):
-                prefix = original_name[: len(FAILED_PREFIX)]
-            elif lower.startswith(POSSIBLE_DUPLICATE_PREFIX.lower()):
-                prefix = original_name[: len(POSSIBLE_DUPLICATE_PREFIX)]
-            elif lower.startswith(COPY_OF_PREFIX.lower()):
-                prefix = original_name[: len(COPY_OF_PREFIX)]
-
-            if prefix:
-                new_name = original_name[len(prefix) :]
-                # If new_name is empty or already exists, skip
-                if not new_name:
-                    log.warning(
-                        f"normalize_prefixes_in_source: derived empty new name for {original_name}, skipping"
-                    )
-                    continue
-
-                # Check if a file with target name already exists in the same folder
-                try:
-                    query = f"name = '{new_name}' and '{config.CSV_SOURCE_FOLDER_ID}' in parents and trashed = false"
-                    exists_resp = (
-                        drive.files()
-                        .list(
-                            q=query,
-                            fields="files(id, name)",
-                            supportsAllDrives=True,
-                            includeItemsFromAllDrives=True,
-                        )
-                        .execute()
-                    )
-                    if exists_resp.get("files"):
-                        log.debug(
-                            f"normalize_prefixes_in_source: target name '{new_name}' already exists in source folder — leaving '{original_name}' as-is"
-                        )
-                        continue
-                except Exception as e:
-                    log.debug(
-                        f"normalize_prefixes_in_source: error checking existing file for {new_name}: {e}"
-                    )
-
-                try:
-                    log.debug(
-                        f"normalize_prefixes_in_source: renaming '{original_name}' -> '{new_name}'"
-                    )
-                    drive.files().update(
-                        fileId=f["id"], body={"name": new_name}, supportsAllDrives=True
-                    ).execute()
-                except Exception as e:
-                    log.error(
-                        f"normalize_prefixes_in_source: failed to rename {original_name}: {e}"
-                    )
-    except Exception as e:
-        log.error(f"normalize_prefixes_in_source: unexpected error: {e}")
 
 
 def safe_str(v: Any) -> str:
