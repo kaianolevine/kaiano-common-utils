@@ -7,9 +7,8 @@ import time
 from typing import Any, Iterable, List, Optional
 
 import acoustid
-import musicbrainzngs
-
 import kaiano_common_utils.logger as log
+import musicbrainzngs
 
 from .retagger_types import Identifier, TagSnapshot, TrackId, TrackMetadata
 

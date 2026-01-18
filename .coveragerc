@@ -1,6 +1,6 @@
 [run]
 branch = True
-source = kaiano_common_utils
+source = kaiano
 
 [report]
 show_missing = True

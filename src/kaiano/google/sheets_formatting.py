@@ -2,7 +2,6 @@ import time
 from typing import Any, Dict, List, Optional
 
 from googleapiclient.errors import HttpError
-
 from kaiano_common_utils import logger as log
 
 from ._auth import AuthConfig, build_sheets_service, load_credentials

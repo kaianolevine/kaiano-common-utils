@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "kaiano_common_utils"
+name = "kaiano"
 version = "0.1.25"
 description = "Common utility functions shared across Kaiano’s projects."
 authors = ["Kaiano Levine <kaiano@example.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [
-  { include = "kaiano_common_utils", from = "src" }
+  { include = "kaiano", from = "src" }
 ]
 
 [tool.poetry.dependencies]
@@ -43,7 +43,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.coverage.run]
 branch = true
-source = ["kaiano_common_utils"]
+source = ["kaiano"]
 
 [tool.coverage.report]
 fail_under = 90

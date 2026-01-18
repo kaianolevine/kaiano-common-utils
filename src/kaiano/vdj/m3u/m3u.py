@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 import pytz
-
 from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
 

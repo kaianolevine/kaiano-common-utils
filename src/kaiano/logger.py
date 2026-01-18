@@ -1,9 +1,8 @@
 import datetime
 import logging
 
-from dotenv import load_dotenv
-
 import kaiano_common_utils.config as config
+from dotenv import load_dotenv
 
 load_dotenv()
 

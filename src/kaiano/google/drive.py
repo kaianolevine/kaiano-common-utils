@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-
 from kaiano_common_utils import config
 from kaiano_common_utils import logger as log
 

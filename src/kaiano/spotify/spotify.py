@@ -4,12 +4,11 @@ import time
 
 import requests
 import spotipy
+from kaiano_common_utils import config
+from kaiano_common_utils import logger as log
 from spotipy import Spotify
 from spotipy.exceptions import SpotifyException, SpotifyOauthError
 from spotipy.oauth2 import CacheHandler, SpotifyOAuth
-
-from kaiano_common_utils import config
-from kaiano_common_utils import logger as log
 
 log = log.get_logger()
 
