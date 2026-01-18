@@ -125,6 +125,15 @@ def pytest_configure():
     googleapiclient_http.MediaIoBaseDownload = MediaIoBaseDownload  # type: ignore[attr-defined]
     googleapiclient_http.MediaFileUpload = MediaFileUpload  # type: ignore[attr-defined]
 
+    class MediaIoBaseUpload:  # pragma: no cover
+        def __init__(self, fh, mimetype=None, resumable=False, chunksize=None):
+            self.fh = fh
+            self.mimetype = mimetype
+            self.resumable = resumable
+            self.chunksize = chunksize
+
+    googleapiclient_http.MediaIoBaseUpload = MediaIoBaseUpload  # type: ignore[attr-defined]
+
     googleapiclient.discovery = googleapiclient_discovery  # type: ignore[attr-defined]
     googleapiclient.errors = googleapiclient_errors  # type: ignore[attr-defined]
     googleapiclient.http = googleapiclient_http  # type: ignore[attr-defined]
