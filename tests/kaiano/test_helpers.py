@@ -1,4 +1,4 @@
-from kaiano_common_utils import helpers as h
+from kaiano import helpers as h
 
 # =====================================================
 # Basic utilities
