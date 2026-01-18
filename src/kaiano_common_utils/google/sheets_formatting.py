@@ -13,6 +13,11 @@ from ._retry import is_retryable_http_error
 # -----------------------------------------------------------------------------
 
 
+def _as_sheets_service(sheets_or_service: Any) -> Any:
+    """Accept either SheetsFacade or raw Sheets API service and return the raw service."""
+    return getattr(sheets_or_service, "service", sheets_or_service)
+
+
 def _get_sheets_service(auth: AuthConfig | None = None, sheets_service=None):
     """Return an authorized googleapiclient Sheets service.
 
@@ -312,14 +317,10 @@ class SheetsFormatting:
 
     @staticmethod
     def set_column_text_formatting(
-        spreadsheet_id: str,
-        sheet_name: str,
-        column_indexes,
-        *,
-        sheets_service=None,
+        sheets_or_service, spreadsheet_id: str, sheet_name: str, column_indexes
     ) -> None:
         set_column_text_formatting(
-            SheetsFormatting._service(sheets_service),
+            sheets_or_service,
             spreadsheet_id,
             sheet_name,
             column_indexes,
@@ -327,14 +328,13 @@ class SheetsFormatting:
 
     @staticmethod
     def reorder_sheets(
+        sheets_or_service,
         spreadsheet_id: str,
         sheet_names_in_order: List[str],
         spreadsheet_metadata: Dict,
-        *,
-        sheets_service=None,
     ) -> None:
         reorder_sheets(
-            SheetsFormatting._service(sheets_service),
+            sheets_or_service,
             spreadsheet_id,
             sheet_names_in_order,
             spreadsheet_metadata,
@@ -405,13 +405,14 @@ class SheetsFormattingPresets:
 
     @staticmethod
     def set_column_formatting(
-        sheets_service,
-        spreadsheet_id: str,
-        sheet_name: str,
-        num_columns: int,
+        sheets_or_service, spreadsheet_id: str, sheet_name: str, num_columns: int
     ) -> None:
-        """Apply the module's legacy per-column formatting recipe."""
-        set_column_formatting(sheets_service, spreadsheet_id, sheet_name, num_columns)
+        set_column_formatting(
+            sheets_or_service,
+            spreadsheet_id,
+            sheet_name,
+            num_columns,
+        )
 
     @staticmethod
     def update_sheet_values(
@@ -1184,8 +1185,9 @@ def set_sheet_formatting(
 
 
 def set_column_formatting(
-    sheets_service, spreadsheet_id: str, sheet_name: str, num_columns: int
+    sheets_or_service, spreadsheet_id: str, sheet_name: str, num_columns: int
 ):
+    sheets_service = _as_sheets_service(sheets_or_service)
     """
     Sets formatting for specified columns (first column date, others text).
     """
@@ -1269,8 +1271,9 @@ def set_column_formatting(
 
 
 def set_column_text_formatting(
-    sheets_service, spreadsheet_id: str, sheet_name: str, column_indexes
+    sheets_or_service, spreadsheet_id: str, sheet_name: str, column_indexes
 ):
+    sheets_service = _as_sheets_service(sheets_or_service)
     """
     Force plain text formatting for the given zero-based column indexes on a sheet.
 
@@ -1336,11 +1339,12 @@ def set_column_text_formatting(
 
 
 def reorder_sheets(
-    sheets_service,
+    sheets_or_service,
     spreadsheet_id: str,
     sheet_names_in_order: List[str],
     spreadsheet_metadata: Dict,
 ):
+    sheets_service = _as_sheets_service(sheets_or_service)
     """
     Reorders sheets in the spreadsheet to match the order of sheet_names_in_order.
     Sheets not in the list will be placed after those specified.
