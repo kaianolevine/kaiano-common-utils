@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from typing import Dict, Optional
 
-import kaiano_common_utils.logger as log
 import music_tag
 from mutagen.id3 import ID3, TDRC, TYER, ID3NoHeaderError
+
+import kaiano.logger as log
 
 from .retagger_types import TagReaderWriter, TagSnapshot, TrackMetadata
 

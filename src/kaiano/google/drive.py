@@ -402,7 +402,7 @@ class DriveFacade:
     def get_all_m3u_files(self) -> list[dict]:
         """Return all VirtualDJ history .m3u files (newest-first).
 
-        Matches legacy `kaiano_common_utils.m3u_parsing.get_all_m3u_files(drive_service)`.
+        Matches legacy `kaiano.m3u_parsing.get_all_m3u_files(drive_service)`.
 
         Returns a list of dicts containing at least: {"id": str, "name": str}.
         Sorting is by filename. With date-prefixed filenames (YYYY-MM-DD.m3u), this
@@ -432,7 +432,7 @@ class DriveFacade:
     def get_most_recent_m3u_file(self) -> dict | None:
         """Return the most recent .m3u file.
 
-        Matches legacy `kaiano_common_utils.m3u_parsing.get_most_recent_m3u_file(drive_service)`.
+        Matches legacy `kaiano.m3u_parsing.get_most_recent_m3u_file(drive_service)`.
 
         Returns a dict with keys: {"id", "name"} or None.
         """

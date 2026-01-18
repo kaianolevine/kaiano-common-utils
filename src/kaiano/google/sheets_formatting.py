@@ -22,7 +22,7 @@ def _get_sheets_service(auth: AuthConfig | None = None, sheets_service=None):
     """Return an authorized googleapiclient Sheets service.
 
     We intentionally keep this module self-contained so it does not depend on
-    legacy helpers living in `kaiano_common_utils.api.google.sheets`.
+    legacy helpers living in `kaiano.api.google.sheets`.
     """
     if sheets_service is not None:
         return sheets_service

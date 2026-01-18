@@ -50,7 +50,7 @@ Callers should treat anything prefixed with `_` as internal and unstable.
 
 ### Import
 ```python
-from kaiano_common_utils.google import GoogleAPI
+from kaiano.google import GoogleAPI
 ```
 
 ### Construction
@@ -194,14 +194,14 @@ External repos **never** build clients directly.
 
 ### Old
 ```python
-from kaiano_common_utils.google.sheets import get_sheets_service, read_sheet
+from kaiano.google.sheets import get_sheets_service, read_sheet
 svc = get_sheets_service()
 rows = read_sheet(svc, sid, "Sheet1!A2:C")
 ```
 
 ### New
 ```python
-from kaiano_common_utils.google import GoogleAPI
+from kaiano.google import GoogleAPI
 g = GoogleAPI.from_env()
 rows = g.sheets.read_values(sid, "Sheet1!A2:C")
 ```
@@ -221,7 +221,7 @@ rows = g.sheets.read_values(sid, "Sheet1!A2:C")
 If you need Google access in a Kaiano project, start here:
 
 ```python
-from kaiano_common_utils.google import GoogleAPI
+from kaiano.google import GoogleAPI
 ```
 
 Everything else is an implementation detail.

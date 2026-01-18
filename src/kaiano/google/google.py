@@ -27,7 +27,7 @@ class GoogleAPI:
     directly.
 
     Example:
-        from kaiano_common_utils.api.google import GoogleAPI
+        from kaiano.api.google import GoogleAPI
         g = GoogleAPI.from_env()
         rows = g.sheets.read_values(spreadsheet_id, "Sheet1!A2:C")
     """
@@ -48,7 +48,7 @@ class GoogleAPI:
         auth = auth or AuthConfig()
         retry = retry or RetryConfig()
 
-        # Prefer kaiano_common_utils._google_credentials if present
+        # Prefer kaiano._google_credentials if present
         creds = load_credentials(auth)
         sheets_service = build_sheets_service(creds)
         drive_service = build_drive_service(creds)

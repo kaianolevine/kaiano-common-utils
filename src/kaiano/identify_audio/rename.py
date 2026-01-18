@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-import kaiano_common_utils.helpers as helpers
+import kaiano.helpers as helpers
 
 
 @dataclass

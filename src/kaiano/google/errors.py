@@ -1,5 +1,5 @@
 class GoogleAPIError(RuntimeError):
-    """Base error for kaiano_common_utils.google."""
+    """Base error for kaiano.google."""
 
 
 class NotFoundError(GoogleAPIError):

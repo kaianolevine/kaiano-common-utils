@@ -1,4 +1,4 @@
-# m3u_history (kaiano_common_utils)
+# m3u_history (kaiano)
 
 A clean, API-style interface for processing VirtualDJ history `.m3u` files.
 

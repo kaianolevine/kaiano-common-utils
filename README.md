@@ -69,7 +69,7 @@ pre-commit run --all-files
 ### 5️⃣ Run Tests
 
 ```bash
-poetry run pytest --cov=kaiano_common_utils --cov-report=term-missing
+poetry run pytest --cov=kaiano --cov-report=term-missing
 ```
 
 Expected:
@@ -163,8 +163,8 @@ kaiano-common-utils = { path = "../kaiano-common-utils", develop = true }
 ## Usage
 
 ```python
-import kaiano_common_utils as kcu
-# from kaiano_common_utils.something import useful_function
+import kaiano as kcu
+# from kaiano.something import useful_function
 ```
 
 ## Development
@@ -172,7 +172,7 @@ import kaiano_common_utils as kcu
 ```bash
 poetry install
 pre-commit install
-poetry run pytest --cov=kaiano_common_utils
+poetry run pytest --cov=kaiano
 ```
 
 ## Versioning

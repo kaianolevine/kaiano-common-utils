@@ -1,4 +1,4 @@
-# identify_audio (kaiano_common_utils)
+# identify_audio (kaiano)
 
 Local-filesystem **audio identification**, **tagging**, and **renaming** utilities wrapped behind a clean, reusable interface.
 
@@ -30,13 +30,13 @@ A convenience wrapper that composes identify/tag/rename, but **each step is stil
 Most code should only import **AudioToolbox**:
 
 ```python
-from kaiano_common_utils.library.identify_audio import AudioToolbox
+from kaiano.library.identify_audio import AudioToolbox
 ```
 
 Advanced use (lower-level orchestrator):
 
 ```python
-from kaiano_common_utils.library.identify_audio import IdentifyAudio
+from kaiano.library.identify_audio import IdentifyAudio
 ```
 
 ---
@@ -44,7 +44,7 @@ from kaiano_common_utils.library.identify_audio import IdentifyAudio
 ## Quick start
 
 ```python
-from kaiano_common_utils.library.identify_audio import AudioToolbox
+from kaiano.library.identify_audio import AudioToolbox
 
 tool = AudioToolbox.from_env(acoustid_api_key="YOUR_ACOUSTID_KEY")
 
@@ -66,7 +66,7 @@ print(result.identified, result.reason, result.path_out, result.desired_filename
 ### A) Identify only (no tagging, no rename)
 
 ```python
-from kaiano_common_utils.library.identify_audio import AudioToolbox
+from kaiano.library.identify_audio import AudioToolbox
 
 tool = AudioToolbox.from_env(acoustid_api_key="YOUR_ACOUSTID_KEY")
 
@@ -89,7 +89,7 @@ print(meta.title, meta.artist, meta.year)
 This is useful for VirtualDJ compatibility fixes.
 
 ```python
-from kaiano_common_utils.library.identify_audio import AudioToolbox, TagPolicy
+from kaiano.library.identify_audio import AudioToolbox, TagPolicy
 
 tool = AudioToolbox.from_env(acoustid_api_key="YOUR_ACOUSTID_KEY")
 
@@ -112,7 +112,7 @@ tool.tags.write("/path/to/song.mp3", updates, ensure_virtualdj_compat=True)
 ### D) Rename only (local)
 
 ```python
-from kaiano_common_utils.library.identify_audio import AudioToolbox
+from kaiano.library.identify_audio import AudioToolbox
 
 tool = AudioToolbox.from_env(acoustid_api_key="YOUR_ACOUSTID_KEY")
 
@@ -164,7 +164,7 @@ Fields you’ll likely use in middleware:
 Controls identification thresholds and candidate count.
 
 ```python
-from kaiano_common_utils.library.identify_audio import IdentificationPolicy
+from kaiano.library.identify_audio import IdentificationPolicy
 
 policy = IdentificationPolicy(min_confidence=0.90, max_candidates=5)
 ```
@@ -178,7 +178,7 @@ Controls how tagging behaves on identify failures.
   - `"skip"`: do nothing
 
 ```python
-from kaiano_common_utils.library.identify_audio import TagPolicy
+from kaiano.library.identify_audio import TagPolicy
 
 tag = TagPolicy.virtualdj_safe()
 ```
@@ -190,7 +190,7 @@ Controls rename behavior:
 - `require_title_and_artist`
 
 ```python
-from kaiano_common_utils.library.identify_audio import RenamePolicy
+from kaiano.library.identify_audio import RenamePolicy
 
 rename = RenamePolicy.template_policy("{title}_{artist}", require_title_and_artist=True)
 ```
@@ -208,7 +208,7 @@ Fix options:
 - Treat it as “no_candidates” and rely on passthrough tagging
 
 ### “Method not found” errors (e.g. dump vs dump_tags)
-This usually means the underlying implementation changed names. The facades in this module are intended to smooth that over. If you see these errors, update `kaiano_common_utils` in the consuming project to ensure you’re running the latest version.
+This usually means the underlying implementation changed names. The facades in this module are intended to smooth that over. If you see these errors, update `kaiano` in the consuming project to ensure you’re running the latest version.
 
 ---
 

@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Callable, Optional, TypeVar
 
 from googleapiclient.errors import HttpError
-from kaiano_common_utils import logger as log
+
+from kaiano import logger as log
 
 log = log.get_logger()
 
