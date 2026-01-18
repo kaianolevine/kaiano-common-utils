@@ -1,7 +1,10 @@
 import io
 import os
+import random
+import time
 from typing import Any, Optional
 
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 from kaiano_common_utils import config
@@ -131,24 +134,69 @@ class DriveFacade:
         return folder_id
 
     def copy_file(
-        self, file_id: str, *, parent_folder_id: str, name: Optional[str] = None
+        self,
+        file_id: str,
+        *,
+        parent_folder_id: Optional[str] = None,
+        name: Optional[str] = None,
+        max_retries: int = 5,
     ) -> str:
-        body = {"parents": [parent_folder_id]}
+        """Copy a Drive file.
+
+        This method includes a small retry loop to handle Drive propagation delay where a
+        just-created file may temporarily return a 404 "File not found" on copy.
+
+        Backwards compatible with the previous signature; callers can still pass
+        `parent_folder_id` and `name` as before.
+        """
+
+        body: dict[str, Any] = {}
+        if parent_folder_id:
+            body["parents"] = [parent_folder_id]
         if name:
             body["name"] = name
-        copied = execute_with_retry(
-            lambda: self._service.files()
-            .copy(
-                fileId=file_id,
-                body=body,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute(),
-            context=f"copying file {file_id} to folder {parent_folder_id}",
-            retry=self._retry,
+
+        delay = 1.0
+        for attempt in range(max_retries):
+            try:
+                log.info(
+                    f"📄 Copying file {file_id} → '{name if name else '(same name)'}' (attempt {attempt+1}/{max_retries})"
+                )
+                copied = execute_with_retry(
+                    lambda: self._service.files()
+                    .copy(
+                        fileId=file_id,
+                        body=body,
+                        fields="id",
+                        supportsAllDrives=True,
+                    )
+                    .execute(),
+                    context=f"copying file {file_id}",
+                    retry=self._retry,
+                )
+                new_file_id = copied.get("id")
+                if not new_file_id:
+                    raise RuntimeError(
+                        f"Drive copy did not return an id for source_file_id={file_id}"
+                    )
+                log.info(f"✅ File copied successfully: {new_file_id}")
+                return new_file_id
+
+            except HttpError as e:
+                status = getattr(e.resp, "status", None)
+                if status == 404 and "not found" in str(e).lower():
+                    wait = delay + random.uniform(0, 0.5)
+                    log.warning(
+                        f"⚠️ File {file_id} not yet visible, retrying in {wait:.1f}s (attempt {attempt+1}/{max_retries})"
+                    )
+                    time.sleep(wait)
+                    delay *= 2
+                    continue
+                raise
+
+        raise RuntimeError(
+            f"Failed to copy file {file_id} after {max_retries} attempts"
         )
-        return copied["id"]
 
     def move_file(
         self, file_id: str, *, new_parent_id: str, remove_from_parents: bool = True

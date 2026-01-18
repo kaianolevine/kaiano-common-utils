@@ -1,3 +1,5 @@
+import random
+import time
 from typing import Any, Dict, Optional
 
 from googleapiclient.errors import HttpError
@@ -24,7 +26,49 @@ class SheetsFacade:
         """Underlying googleapiclient Sheets service."""
         return self._service
 
-    def get_metadata(self, spreadsheet_id: str) -> Dict:
+    def get_metadata(
+        self, spreadsheet_id: str, *, fields: str | None = None, max_retries: int = 6
+    ) -> Dict[str, Any]:
+        delay = 1.0
+        last_err: HttpError | None = None
+
+        for attempt in range(max_retries):
+            try:
+
+                def _do_get():
+                    if fields:
+                        return (
+                            self._service.spreadsheets()
+                            .get(spreadsheetId=spreadsheet_id, fields=fields)
+                            .execute()
+                        )
+                    return (
+                        self._service.spreadsheets()
+                        .get(spreadsheetId=spreadsheet_id)
+                        .execute()
+                    )
+
+                return _do_get()
+
+            except HttpError as e:
+                status = getattr(e.resp, "status", None)
+                if status in (429, 500, 503) or (
+                    status == 403 and "quota" in str(e).lower()
+                ):
+                    last_err = e
+                    wait = delay * (0.7 + random.random() * 0.6)
+                    log.warning(
+                        f"⚠️ Retryable error {status} when fetching spreadsheet {spreadsheet_id}; retrying in {wait:.1f}s (attempt {attempt+1}/{max_retries})"
+                    )
+                    time.sleep(wait)
+                    delay *= 2
+                    continue
+                raise
+
+        # Exhausted retries; re-raise the last transient error if we have one
+        if last_err is not None:
+            raise last_err
+
         return execute_with_retry(
             lambda: self._service.spreadsheets()
             .get(spreadsheetId=spreadsheet_id)
@@ -33,7 +77,7 @@ class SheetsFacade:
             retry=self._retry,
         )
 
-    def batch_update(self, spreadsheet_id: str, requests: list[dict]) -> Dict:
+    def batch_update(self, spreadsheet_id: str, requests: list[dict]) -> Dict[str, Any]:
         body = {"requests": requests}
         return execute_with_retry(
             lambda: self._service.spreadsheets()
@@ -215,7 +259,7 @@ class SheetsFacade:
         sheet_title: str,
         rows: list[list[Any]],
         *,
-        value_input_option: str = "USER_ENTERED",
+        value_input_option: str = "RAW",
     ) -> None:
         """Ensure sheet exists, then write rows starting at A1."""
 
