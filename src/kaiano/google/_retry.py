@@ -7,20 +7,48 @@ from typing import Callable, Optional, TypeVar
 
 from googleapiclient.errors import HttpError
 
-from kaiano import logger as log
+from kaiano import logger as logger_mod
 
-log = log.get_logger()
+log = logger_mod.get_logger()
 
 T = TypeVar("T")
 
 
 @dataclass(frozen=True)
 class RetryConfig:
-    """Retry/backoff settings for Google API calls."""
+    """Retry/backoff settings for Google API calls.
+
+    Notes:
+    - `max_retries` is the canonical field.
+    - `max_attempts` is accepted as a backward/ergonomic alias and mapped to `max_retries`.
+    """
 
     max_retries: int = 8
     base_delay_s: float = 1.0
     max_delay_s: float = 60.0
+
+    # Optional alias for ergonomics / backwards compatibility
+    max_attempts: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        # Backward/ergonomic alias: allow callers to pass max_attempts.
+        if self.max_attempts is not None:
+            object.__setattr__(self, "max_retries", int(self.max_attempts))
+
+        # Defensive clamping: keep config sane and avoid surprising behavior.
+        # (We clamp instead of raising to keep retry helpers low-friction.)
+        if self.max_retries < 1:
+            object.__setattr__(self, "max_retries", 1)
+
+        if self.base_delay_s <= 0:
+            object.__setattr__(self, "base_delay_s", 0.1)
+
+        if self.max_delay_s <= 0:
+            object.__setattr__(self, "max_delay_s", 0.1)
+
+        # Ensure max_delay_s is not smaller than base_delay_s.
+        if self.max_delay_s < self.base_delay_s:
+            object.__setattr__(self, "max_delay_s", float(self.base_delay_s))
 
 
 def _http_status(error: HttpError) -> Optional[int]:

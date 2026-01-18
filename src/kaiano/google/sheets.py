@@ -1,14 +1,13 @@
-import random
-import time
 from typing import Any, Dict, Optional
 
 from googleapiclient.errors import HttpError
 
-from kaiano import logger as log
+from kaiano import logger as logger_mod
 
 from ._retry import RetryConfig, execute_with_retry
+from .sheets_formatting import SheetsFormatter
 
-log = log.get_logger()
+log = logger_mod.get_logger()
 
 
 class SheetsFacade:
@@ -20,61 +19,40 @@ class SheetsFacade:
     def __init__(self, service: Any, retry: RetryConfig | None = None):
         self._service = service
         self._retry = retry or RetryConfig()
+        self._formatter: SheetsFormatter | None = None
 
     @property
     def service(self) -> Any:
         """Underlying googleapiclient Sheets service."""
         return self._service
 
+    @property
+    def formatter(self) -> SheetsFormatter:
+        """Sheets formatting helper that reuses this facade's Sheets service."""
+        if self._formatter is None:
+            # Reuse the same Sheets API service and retry policy.
+            self._formatter = SheetsFormatter(sheets_service=self._service)
+        return self._formatter
+
     def get_metadata(
         self, spreadsheet_id: str, *, fields: str | None = None, max_retries: int = 6
     ) -> Dict[str, Any]:
-        delay = 1.0
-        last_err: HttpError | None = None
+        def _do_get() -> Dict[str, Any]:
+            if fields:
+                return (
+                    self._service.spreadsheets()
+                    .get(spreadsheetId=spreadsheet_id, fields=fields)
+                    .execute()
+                )
+            return (
+                self._service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            )
 
-        for attempt in range(max_retries):
-            try:
-
-                def _do_get():
-                    if fields:
-                        return (
-                            self._service.spreadsheets()
-                            .get(spreadsheetId=spreadsheet_id, fields=fields)
-                            .execute()
-                        )
-                    return (
-                        self._service.spreadsheets()
-                        .get(spreadsheetId=spreadsheet_id)
-                        .execute()
-                    )
-
-                return _do_get()
-
-            except HttpError as e:
-                status = getattr(e.resp, "status", None)
-                if status in (429, 500, 503) or (
-                    status == 403 and "quota" in str(e).lower()
-                ):
-                    last_err = e
-                    wait = delay * (0.7 + random.random() * 0.6)
-                    log.warning(
-                        f"⚠️ Retryable error {status} when fetching spreadsheet {spreadsheet_id}; retrying in {wait:.1f}s (attempt {attempt+1}/{max_retries})"
-                    )
-                    time.sleep(wait)
-                    delay *= 2
-                    continue
-                raise
-
-        # Exhausted retries; re-raise the last transient error if we have one
-        if last_err is not None:
-            raise last_err
-
+        retry = RetryConfig(max_attempts=max_retries)
         return execute_with_retry(
-            lambda: self._service.spreadsheets()
-            .get(spreadsheetId=spreadsheet_id)
-            .execute(),
+            _do_get,
             context=f"fetching spreadsheet metadata ({spreadsheet_id})",
-            retry=self._retry,
+            retry=retry,
         )
 
     def batch_update(self, spreadsheet_id: str, requests: list[dict]) -> Dict[str, Any]:

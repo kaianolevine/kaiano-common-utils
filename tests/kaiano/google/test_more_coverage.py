@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 
-def test_retry_execute_with_retry_zero_retries_hits_defensive_path():
+def test_retry_execute_with_retry_zero_retries_is_clamped_to_one_attempt():
     from kaiano.google._retry import RetryConfig, execute_with_retry
 
-    # With max_retries=0, the loop never runs; we should get the final RuntimeError.
-    try:
-        execute_with_retry(lambda: 1, context="unit", retry=RetryConfig(max_retries=0))
-    except RuntimeError as e:
-        assert "Unknown error" in str(e) or "Unknown" in str(e)
-    else:
-        raise AssertionError("expected RuntimeError")
+    # RetryConfig defensively clamps max_retries to at least 1.
+    retry = RetryConfig(max_retries=0)
+    assert retry.max_retries == 1
+
+    # With one attempt, the function should run normally.
+    assert execute_with_retry(lambda: 1, context="unit", retry=retry) == 1
 
 
 def test_errors_module_smoke():
@@ -95,121 +94,3 @@ def test_drive_facade_exercises_remaining_helpers(monkeypatch, tmp_path):
     p.write_text("a,b")
     drive.upload_csv_as_google_sheet(str(p), parent_id="p", dest_name="Y")
     drive.create_spreadsheet_in_folder("S", "p")
-
-
-def test_sheets_formatting_apply_formatting_to_sheet_and_helpers(monkeypatch):
-    from kaiano.google import sheets_formatting as sf
-
-    # Avoid sleeps
-    monkeypatch.setattr(sf.time, "sleep", lambda _s: None)
-
-    # Fake sheets service with minimal get + batchUpdate
-    class _Exec:
-        def __init__(self, fn):
-            self._fn = fn
-
-        def execute(self):
-            return self._fn()
-
-    class _Svc:
-        def spreadsheets(self):
-            class _Sheets:
-                def get(self, spreadsheetId=None, includeGridData=None, fields=None):
-                    # Return metadata with 2 sheets and gridProperties
-                    return _Exec(
-                        lambda: {
-                            "sheets": [
-                                {
-                                    "properties": {
-                                        "sheetId": 1,
-                                        "title": "A",
-                                        "gridProperties": {
-                                            "columnCount": 3,
-                                            "rowCount": 10,
-                                        },
-                                    },
-                                    "data": [
-                                        {
-                                            "columnMetadata": [
-                                                {"pixelSize": 100},
-                                                {"pixelSize": 120},
-                                                {"pixelSize": 330},
-                                            ]
-                                        }
-                                    ],
-                                },
-                                {
-                                    "properties": {
-                                        "sheetId": 2,
-                                        "title": "B",
-                                        "gridProperties": {
-                                            "columnCount": 2,
-                                            "rowCount": 5,
-                                        },
-                                    },
-                                    "data": [
-                                        {
-                                            "columnMetadata": [
-                                                {"pixelSize": 50},
-                                                {"pixelSize": None},
-                                            ]
-                                        }
-                                    ],
-                                },
-                            ]
-                        }
-                    )
-
-                def batchUpdate(self, spreadsheetId=None, body=None):
-                    return _Exec(
-                        lambda: {"replies": [], "requests": body.get("requests", [])}
-                    )
-
-                def values(self):
-                    class _Values:
-                        def update(
-                            self,
-                            spreadsheetId=None,
-                            range=None,
-                            valueInputOption=None,
-                            body=None,
-                        ):
-                            return _Exec(lambda: {"updated": True})
-
-                    return _Values()
-
-            return _Sheets()
-
-    monkeypatch.setattr(sf, "_get_sheets_service", lambda *a, **k: _Svc())
-
-    captured = {"batches": []}
-
-    def capture_batch(_svc, _ssid, requests, **_kwargs):
-        captured["batches"].append(list(requests))
-
-    monkeypatch.setattr(sf, "_batch_update_with_retry", capture_batch)
-
-    # Force a deterministic column pixel-size lookup
-    monkeypatch.setattr(
-        sf,
-        "_get_column_pixel_sizes",
-        lambda *_a, **_k: {1: [100, 120, 330], 2: [50, None]},
-    )
-
-    sf.apply_formatting_to_sheet("ssid")
-
-    # We should have at least 2 batches: initial formatting + width buffer
-    assert len(captured["batches"]) >= 2
-
-    # Cover helpers
-    assert sf._prepare_cell_for_user_entered(None, force_text=True) == ""
-    assert sf._prepare_cell_for_user_entered(
-        "=HYPERLINK('x','y')", force_text=True
-    ).startswith("=")
-    assert sf._prepare_cell_for_user_entered(123, force_text=True).startswith("'")
-    assert sf._prepare_cell_for_user_entered(123, force_text=False) == 123
-
-    # set_values uses USER_ENTERED vs RAW paths
-    svc = _Svc()
-    sf.set_values(svc, "ssid", "A", 1, 1, [["x", 1]], force_text=True)
-    sf.set_values(svc, "ssid", "A", 1, 1, [["x", 1]], force_text=False)

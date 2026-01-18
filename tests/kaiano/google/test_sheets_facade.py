@@ -184,8 +184,8 @@ def test_get_range_format():
 def test_get_metadata_retries_transient_then_succeeds(monkeypatch, as_http_error):
     from kaiano.google.sheets import SheetsFacade
 
-    monkeypatch.setattr("kaiano.google.sheets.time.sleep", lambda _s: None)
-    monkeypatch.setattr("kaiano.google.sheets.random.random", lambda: 0.0)
+    monkeypatch.setattr("kaiano.google._retry.time.sleep", lambda _s: None)
+    monkeypatch.setattr("kaiano.google._retry.random.random", lambda: 0.0)
 
     svc = FakeSheetsService()
     calls = {"n": 0}
@@ -216,8 +216,8 @@ def test_get_metadata_retries_transient_then_succeeds(monkeypatch, as_http_error
 def test_get_metadata_exhausts_transient_and_raises(monkeypatch, as_http_error):
     from kaiano.google.sheets import SheetsFacade
 
-    monkeypatch.setattr("kaiano.google.sheets.time.sleep", lambda _s: None)
-    monkeypatch.setattr("kaiano.google.sheets.random.random", lambda: 0.0)
+    monkeypatch.setattr("kaiano.google._retry.time.sleep", lambda _s: None)
+    monkeypatch.setattr("kaiano.google._retry.random.random", lambda: 0.0)
 
     svc = FakeSheetsService()
 
