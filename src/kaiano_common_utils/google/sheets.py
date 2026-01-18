@@ -1,5 +1,7 @@
 from typing import Any, Dict, Optional
 
+from googleapiclient.errors import HttpError
+
 from kaiano_common_utils import logger as log
 
 from ._retry import RetryConfig, execute_with_retry
@@ -144,6 +146,85 @@ class SheetsFacade:
                 return int(props["sheetId"])
         raise ValueError(
             f"Sheet '{sheet_name}' not found in spreadsheet {spreadsheet_id}"
+        )
+
+    def delete_sheet_by_name(self, spreadsheet_id: str, title: str) -> None:
+        """Delete a sheet by title if it exists."""
+
+        try:
+            meta = self.get_metadata(spreadsheet_id)
+            sheet_id: int | None = None
+            for s in meta.get("sheets", []):
+                props = s.get("properties", {})
+                if props.get("title") == title:
+                    sheet_id = int(props.get("sheetId"))
+                    break
+
+            if sheet_id is None:
+                return
+
+            self.batch_update(
+                spreadsheet_id,
+                [{"deleteSheet": {"sheetId": sheet_id}}],
+            )
+        except HttpError as e:
+            # Ignore "not found" style errors
+            log.debug(f"delete_sheet_by_name: unable to delete '{title}': {e}")
+
+    def clear_all_except_one_sheet(self, spreadsheet_id: str, keep_title: str) -> None:
+        """Delete all sheets except keep_title, and clear values on keep_title."""
+
+        meta = self.get_metadata(spreadsheet_id)
+        sheets_list = meta.get("sheets", [])
+
+        # Ensure keep sheet exists
+        keep_id: int | None = None
+        for s in sheets_list:
+            props = s.get("properties", {})
+            if props.get("title") == keep_title:
+                keep_id = int(props.get("sheetId"))
+                break
+
+        if keep_id is None:
+            self.batch_update(
+                spreadsheet_id,
+                [{"addSheet": {"properties": {"title": keep_title}}}],
+            )
+            meta = self.get_metadata(spreadsheet_id)
+            sheets_list = meta.get("sheets", [])
+
+        # Delete all sheets except keep_title
+        requests: list[dict] = []
+        for s in sheets_list:
+            props = s.get("properties", {})
+            sid = props.get("sheetId")
+            title = props.get("title")
+            if sid is None or title == keep_title:
+                continue
+            requests.append({"deleteSheet": {"sheetId": int(sid)}})
+
+        if requests:
+            self.batch_update(spreadsheet_id, requests)
+
+        # Clear values on the keep sheet
+        self.clear(spreadsheet_id, f"{keep_title}!A:Z")
+
+    def insert_rows(
+        self,
+        spreadsheet_id: str,
+        sheet_title: str,
+        rows: list[list[Any]],
+        *,
+        value_input_option: str = "USER_ENTERED",
+    ) -> None:
+        """Ensure sheet exists, then write rows starting at A1."""
+
+        self.ensure_sheet_exists(spreadsheet_id, sheet_title)
+        self.write_values(
+            spreadsheet_id,
+            f"{sheet_title}!A1",
+            rows,
+            value_input_option=value_input_option,
         )
 
     def sort_sheet(

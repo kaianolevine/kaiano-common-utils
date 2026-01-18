@@ -238,6 +238,105 @@ class DriveFacade:
             retry=self._retry,
         )
 
+    def rename_file(self, file_id: str, new_name: str) -> None:
+        """Rename a Drive file."""
+
+        execute_with_retry(
+            lambda: self._service.files()
+            .update(
+                fileId=file_id,
+                body={"name": new_name},
+                supportsAllDrives=True,
+            )
+            .execute(),
+            context=f"renaming file {file_id} to {new_name}",
+            retry=self._retry,
+        )
+
+    def upload_csv_as_google_sheet(
+        self,
+        filepath: str,
+        *,
+        parent_id: str,
+        dest_name: Optional[str] = None,
+    ) -> str:
+        """Upload a CSV and convert it to a Google Sheet in the destination folder."""
+
+        upload_name = dest_name or os.path.basename(filepath)
+        file_metadata = {
+            "name": upload_name,
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+            "parents": [parent_id],
+        }
+
+        # Upload the CSV but request Drive to convert it to a spreadsheet.
+        media = MediaFileUpload(filepath, mimetype="text/csv", resumable=True)
+
+        created = execute_with_retry(
+            lambda: self._service.files()
+            .create(
+                body=file_metadata,
+                media_body=media,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute(),
+            context=f"uploading CSV as Google Sheet {upload_name} to folder {parent_id}",
+            retry=self._retry,
+        )
+
+        return created["id"]
+
+    def find_or_create_spreadsheet(self, *, parent_folder_id: str, name: str) -> str:
+        """Find an existing spreadsheet by exact name in a folder, or create it."""
+
+        safe_name = name.replace("'", "\\'")
+        query = (
+            f"name = '{safe_name}' and '{parent_folder_id}' in parents and trashed = false "
+            "and mimeType = 'application/vnd.google-apps.spreadsheet'"
+        )
+
+        resp = execute_with_retry(
+            lambda: self._service.files()
+            .list(
+                q=query,
+                spaces="drive",
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute(),
+            context=f"finding spreadsheet '{name}' under {parent_folder_id}",
+            retry=self._retry,
+        )
+
+        files = resp.get("files", [])
+        if files:
+            return files[0]["id"]
+
+        return self.create_spreadsheet_in_folder(name, parent_folder_id)
+
+    def get_all_subfolders(self, parent_folder_id: str) -> list[DriveFile]:
+        """Return all immediate subfolders of a parent folder (newest-first by modifiedTime)."""
+
+        return self.list_files(
+            parent_folder_id,
+            mime_type="application/vnd.google-apps.folder",
+            trashed=False,
+            include_folders=True,
+        )
+
+    def get_files_in_folder(
+        self, folder_id: str, *, include_folders: bool = True
+    ) -> list[DriveFile]:
+        """Return all immediate children in a folder (newest-first by modifiedTime)."""
+
+        return self.list_files(
+            folder_id,
+            trashed=False,
+            include_folders=include_folders,
+        )
+
     def delete_file(self, file_id: str) -> None:
         """Permanently delete a file from Google Drive.
 
