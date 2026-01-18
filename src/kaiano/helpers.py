@@ -1,10 +1,11 @@
 import re
 import unicodedata
+from datetime import datetime
 from typing import Any, Tuple
 
-from kaiano import logger as log
+from kaiano import logger as logger_mod
 
-log = log.get_logger()
+log = logger_mod.get_logger()
 
 
 def extract_date_and_title(file_name: str) -> Tuple[str, str]:
@@ -16,7 +17,7 @@ def extract_date_and_title(file_name: str) -> Tuple[str, str]:
     return (date, title)
 
 
-def extract_year_from_filename(filename):
+def extract_year_from_filename(filename: str) -> str | None:
     log.debug(f"extract_year_from_filename called with filename: {filename}")
     match = re.match(r"(\d{4})[-_]", filename)
     year = match.group(1) if match else None
@@ -24,7 +25,7 @@ def extract_year_from_filename(filename):
     return year
 
 
-def normalize_csv(file_path):
+def normalize_csv(file_path: str) -> None:
     log.debug(f"normalize_csv called with file_path: {file_path} - reading file")
     with open(file_path, "r") as f:
         lines = f.readlines()
@@ -49,6 +50,12 @@ def safe_str(v: Any) -> str:
     if s.strip().lower() == "none":
         return ""
     return s
+
+
+def as_str(v: Any) -> str:
+    if v is None:
+        return ""
+    return str(v).strip()
 
 
 def normalize_year_for_tag(v: Any) -> str:
@@ -93,3 +100,75 @@ def safe_filename_component(v: Any) -> str:
     s = re.sub(r"_+", "_", s)
 
     return s.strip("_")
+
+
+_NON_ALNUM = re.compile(r"[^A-Za-z0-9_]+")
+
+
+def sanitize_part(value: str) -> str:
+    """trim -> lower -> TitleCaseWords -> remove spaces -> sanitize -> collapse underscores"""
+    if not value:
+        return ""
+    v = value.strip().lower()
+    v = "".join(word.capitalize() for word in v.split())
+    v = _NON_ALNUM.sub("_", v)
+    v = re.sub(r"_+", "_", v).strip("_")
+    return v
+
+
+def _parse_season_year(timestamp: str) -> str:
+    """Google Forms timestamp 'M/D/YYYY HH:MM:SS'. If month >= 11, season year is next year."""
+    dt = datetime.strptime(timestamp.strip(), "%m/%d/%Y %H:%M:%S")
+    year = dt.year + (1 if dt.month >= 11 else 0)
+    return str(year)
+
+
+def build_base_filename(
+    timestamp, leader, follower, division, routine, descriptor
+) -> tuple[str, str]:
+    """Return (base_without_version_or_ext, season_year). Base includes season year and optional fields."""
+    season_year = _parse_season_year(timestamp)
+
+    prefix = "_".join(
+        [
+            (leader),
+            (follower),
+            (division),
+        ]
+    )
+
+    tail_parts: list[str] = [season_year]
+    if routine:
+        tail_parts.append(routine)
+    if descriptor:
+        tail_parts.append(descriptor)
+
+    return f"{prefix}_{'_'.join(tail_parts)}", season_year
+
+
+def build_tag_title(
+    *, leader_first: str, leader_last: str, follower_first: str, follower_last: str
+) -> str:
+    # LeaderFirstLeaderLast & FollowerFirstFollowerLast (no spaces between first/last)
+    leader = f"{as_str(leader_first)}{as_str(leader_last)}"
+    follower = f"{as_str(follower_first)}{as_str(follower_last)}"
+    return f"{leader} & {follower}".strip()
+
+
+def build_tag_artist(
+    *,
+    version: str,
+    division: str,
+    season_year: str,
+    routine_name: str,
+    personal_descriptor: str,
+) -> str:
+    base = f"v{as_str(version)} | {as_str(division)} {as_str(season_year)}".strip()
+    parts = [base]
+    rn = as_str(routine_name)
+    pd = as_str(personal_descriptor)
+    if rn:
+        parts.append(rn)
+    if pd:
+        parts.append(pd)
+    return " | ".join([p for p in parts if p])

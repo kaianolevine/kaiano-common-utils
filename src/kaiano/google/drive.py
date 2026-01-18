@@ -1,20 +1,33 @@
 import io
 import os
 import random
+import re
 import time
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBaseUpload
 
 from kaiano import config
-from kaiano import logger as log
+from kaiano import logger as logger_mod
 
 from ._retry import RetryConfig, execute_with_retry
 from .types import DriveFile
 
-log = log.get_logger()
+log = logger_mod.get_logger()
 FOLDER_CACHE = {}
+
+_DRIVE_ID_RE = re.compile(r"[-\w]{25,}")
+_VERSION_RE = re.compile(r"_v(\d+)$")
+
+
+@dataclass(frozen=True)
+class DownloadedFile:
+    file_id: str
+    name: str
+    mime_type: str
+    data: bytes
 
 
 class DriveFacade:
@@ -23,6 +36,14 @@ class DriveFacade:
     External code should generally access this through `GoogleAPI.drive`.
     """
 
+    @staticmethod
+    def extract_drive_file_id(url_or_id: str) -> str | None:
+        """Extract a Drive file id from a URL or return the id if already provided."""
+        if not url_or_id:
+            return None
+        m = _DRIVE_ID_RE.search(url_or_id)
+        return m.group(0) if m else None
+
     def __init__(self, service: Any, retry: RetryConfig | None = None):
         self._service = service
         self._retry = retry or RetryConfig()
@@ -30,6 +51,38 @@ class DriveFacade:
     @property
     def service(self) -> Any:
         return self._service
+
+    def find_file_in_folder(
+        self,
+        parent_folder_id: str,
+        *,
+        name: str,
+        mime_type: str | None = None,
+    ) -> str | None:
+        """Find a non-trashed file by exact name in a folder. Return file id or None."""
+
+        safe_name = name.replace("'", "\\'")
+        q = f"name = '{safe_name}' and '{parent_folder_id}' in parents and trashed = false"
+        if mime_type:
+            safe_mime = mime_type.replace("'", "\\'")
+            q += f" and mimeType = '{safe_mime}'"
+
+        resp = execute_with_retry(
+            lambda: self._service.files()
+            .list(
+                q=q,
+                spaces="drive",
+                fields="files(id, name)",
+                pageSize=10,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute(),
+            context=f"finding file '{name}' under {parent_folder_id}",
+            retry=self._retry,
+        )
+        files = resp.get("files") or []
+        return files[0]["id"] if files else None
 
     def list_files(
         self,
@@ -338,30 +391,14 @@ class DriveFacade:
     def find_or_create_spreadsheet(self, *, parent_folder_id: str, name: str) -> str:
         """Find an existing spreadsheet by exact name in a folder, or create it."""
 
-        safe_name = name.replace("'", "\\'")
-        query = (
-            f"name = '{safe_name}' and '{parent_folder_id}' in parents and trashed = false "
-            "and mimeType = 'application/vnd.google-apps.spreadsheet'"
+        mime = "application/vnd.google-apps.spreadsheet"
+        found = self.find_file_in_folder(
+            parent_folder_id,
+            name=name,
+            mime_type=mime,
         )
-
-        resp = execute_with_retry(
-            lambda: self._service.files()
-            .list(
-                q=query,
-                spaces="drive",
-                fields="files(id, name)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute(),
-            context=f"finding spreadsheet '{name}' under {parent_folder_id}",
-            retry=self._retry,
-        )
-
-        files = resp.get("files", [])
-        if files:
-            return files[0]["id"]
-
+        if found:
+            return found
         return self.create_spreadsheet_in_folder(name, parent_folder_id)
 
     def get_all_subfolders(self, parent_folder_id: str) -> list[DriveFile]:
@@ -504,3 +541,288 @@ class DriveFacade:
         )
 
         return created["id"]
+
+    def resolve_versioned_filename(
+        self,
+        *,
+        parent_folder_id: str,
+        desired_filename: str,
+    ) -> tuple[str, int]:
+        """Return (available_filename, version).
+
+        Requires desired filename end with _vN before extension (e.g. Track_v1.mp3).
+        Scans existing filenames in the destination folder and returns the next
+        available version.
+        """
+        if "." in desired_filename:
+            base, ext = desired_filename.rsplit(".", 1)
+            ext = "." + ext
+        else:
+            base, ext = desired_filename, ""
+
+        m = _VERSION_RE.search(base)
+        if not m:
+            raise ValueError(
+                "desired_filename must include a _vN suffix before extension (e.g. _v1)"
+            )
+
+        base_root = base[: m.start()]
+        start_version = int(m.group(1))
+        base_root_lc = base_root.lower()
+        ext_lc = ext.lower()
+
+        # Fetch existing files with same prefix in the destination folder.
+        safe_root = (base_root + "_v").replace("'", "\\'")
+        q = (
+            f"'{parent_folder_id}' in parents and trashed=false "
+            f"and name contains '{safe_root}'"
+        )
+
+        resp = execute_with_retry(
+            lambda: self._service.files()
+            .list(
+                q=q,
+                spaces="drive",
+                fields="files(name)",
+                pageSize=1000,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute(),
+            context=f"resolving versioned filename in folder {parent_folder_id}",
+            retry=self._retry,
+        )
+
+        used_versions: set[int] = set()
+        for f in resp.get("files", []):
+            name = f.get("name", "")
+            name_lc = name.lower()
+
+            if ext_lc and not name_lc.endswith(ext_lc):
+                continue
+
+            stem = name_lc[: -len(ext_lc)] if ext_lc else name_lc
+            if not stem.startswith(base_root_lc):
+                continue
+
+            m2 = _VERSION_RE.search(stem)
+            if m2:
+                used_versions.add(int(m2.group(1)))
+
+        v = start_version
+        while v in used_versions:
+            v += 1
+
+        return f"{base_root}_v{v}{ext}", v
+
+    def download_file_bytes(self, file_id: str) -> DownloadedFile:
+        """Download a Drive file into memory and return (metadata + bytes)."""
+
+        meta = execute_with_retry(
+            lambda: self._service.files()
+            .get(
+                fileId=file_id,
+                fields="id,name,mimeType",
+                supportsAllDrives=True,
+            )
+            .execute(),
+            context=f"getting metadata for file {file_id}",
+            retry=self._retry,
+        )
+
+        request = execute_with_retry(
+            lambda: self._service.files().get_media(
+                fileId=file_id, supportsAllDrives=True
+            ),
+            context=f"creating download request for file {file_id}",
+            retry=self._retry,
+        )
+
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _status, done = downloader.next_chunk()
+
+        return DownloadedFile(
+            file_id=file_id,
+            name=meta.get("name", ""),
+            mime_type=meta.get("mimeType") or "application/octet-stream",
+            data=fh.getvalue(),
+        )
+
+    def upload_bytes(
+        self,
+        *,
+        parent_id: str,
+        filename: str,
+        content: bytes,
+        mime_type: str,
+    ) -> str:
+        """Upload a new Drive file from bytes and return its file ID."""
+
+        media = MediaIoBaseUpload(
+            io.BytesIO(content), mimetype=mime_type, resumable=False
+        )
+        created = execute_with_retry(
+            lambda: self._service.files()
+            .create(
+                body={"name": filename, "parents": [parent_id]},
+                media_body=media,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute(),
+            context=f"uploading bytes file {filename} to folder {parent_id}",
+            retry=self._retry,
+        )
+        return created["id"]
+
+    def delete_file_with_fallback(
+        self,
+        file_id: str,
+        *,
+        fallback_remove_parent_id: str | None = None,
+        quarantine_folder_name: str = "RoutineMusicHandler_ProcessedOriginals",
+        quarantine_parent_id: str = "root",
+    ) -> None:
+        """Delete a Drive file with fallbacks for common permission constraints.
+
+        Behavior:
+        1) If capabilities allow, try hard delete.
+        2) If hard delete fails and capabilities allow, try trash.
+        3) If delete/trash are not permitted (common for non-owner writers), optionally move the file
+           out of the intake folder into a quarantine folder (default: My Drive root/quarantine_folder_name).
+        """
+
+        # Detect delete/trash permissions up front.
+        try:
+            caps_meta = execute_with_retry(
+                lambda: self._service.files()
+                .get(
+                    fileId=file_id,
+                    fields="capabilities(canDelete,canTrash)",
+                    supportsAllDrives=True,
+                )
+                .execute(),
+                context=f"reading capabilities for file {file_id}",
+                retry=self._retry,
+            )
+            caps = caps_meta.get("capabilities") or {}
+            can_delete = bool(caps.get("canDelete"))
+            can_trash = bool(caps.get("canTrash"))
+        except Exception as e:
+            log.debug(
+                "Failed to read capabilities; will attempt delete/trash anyway: file_id=%s err=%s",
+                file_id,
+                e,
+            )
+            can_delete = True
+            can_trash = True
+
+        skip_delete_trash = (not can_delete) and (not can_trash)
+        if skip_delete_trash:
+            log.info(
+                "Skipping delete/trash due to capabilities: file_id=%s canDelete=%s canTrash=%s",
+                file_id,
+                can_delete,
+                can_trash,
+            )
+
+        # 1) Hard delete
+        if not skip_delete_trash and can_delete:
+            try:
+                execute_with_retry(
+                    lambda: self._service.files()
+                    .delete(fileId=file_id, supportsAllDrives=True)
+                    .execute(),
+                    context=f"deleting file {file_id}",
+                    retry=self._retry,
+                )
+                return
+            except Exception as e:
+                log.warning("Hard delete failed: file_id=%s err=%s", file_id, e)
+
+        # 2) Trash
+        if not skip_delete_trash and can_trash:
+            try:
+                execute_with_retry(
+                    lambda: self._service.files()
+                    .update(
+                        fileId=file_id,
+                        body={"trashed": True},
+                        supportsAllDrives=True,
+                    )
+                    .execute(),
+                    context=f"trashing file {file_id}",
+                    retry=self._retry,
+                )
+                log.info("Trashed file: file_id=%s", file_id)
+                return
+            except Exception as e:
+                log.warning("Trash failed: file_id=%s err=%s", file_id, e)
+
+        # 3) Fallback: move to quarantine
+        if fallback_remove_parent_id:
+            quarantine_folder_id = self.ensure_folder(
+                quarantine_parent_id, quarantine_folder_name
+            )
+
+            try:
+                meta = execute_with_retry(
+                    lambda: self._service.files()
+                    .get(fileId=file_id, fields="id,parents", supportsAllDrives=True)
+                    .execute(),
+                    context=f"getting parents for file {file_id}",
+                    retry=self._retry,
+                )
+                current_parents = meta.get("parents") or []
+            except Exception as e:
+                log.warning(
+                    "Failed to fetch parents before move fallback: file_id=%s err=%s",
+                    file_id,
+                    e,
+                )
+                current_parents = []
+
+            remove_parents: list[str] = []
+            if current_parents and fallback_remove_parent_id in current_parents:
+                remove_parents = [fallback_remove_parent_id]
+            elif current_parents:
+                remove_parents = list(current_parents)
+
+            remove_str = ",".join(remove_parents) if remove_parents else ""
+
+            try:
+                execute_with_retry(
+                    lambda: self._service.files()
+                    .update(
+                        fileId=file_id,
+                        addParents=quarantine_folder_id,
+                        removeParents=remove_str,
+                        fields="id,parents",
+                        supportsAllDrives=True,
+                    )
+                    .execute(),
+                    context=f"moving file {file_id} to quarantine folder",
+                    retry=self._retry,
+                )
+                log.info(
+                    "Moved original to quarantine folder: file_id=%s quarantine_folder_id=%s removed_parents=%s",
+                    file_id,
+                    quarantine_folder_id,
+                    remove_str or "<none>",
+                )
+                return
+            except Exception as e:
+                log.warning(
+                    "Move-to-quarantine fallback failed: file_id=%s quarantine_folder_id=%s removed_parents=%s err=%s",
+                    file_id,
+                    quarantine_folder_id,
+                    remove_str or "<none>",
+                    e,
+                )
+
+        raise PermissionError(
+            f"Unable to delete or trash Drive file {file_id}. See logs for permissions/capabilities snapshot."
+        )
