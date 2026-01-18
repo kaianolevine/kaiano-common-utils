@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from kaiano_common_utils import logger as log
+from kaiano import logger as log
 
 from ._auth import (
     AuthConfig,

@@ -3,7 +3,8 @@ import time
 from typing import Any, Dict, Optional
 
 from googleapiclient.errors import HttpError
-from kaiano_common_utils import logger as log
+
+from kaiano import logger as log
 
 from ._retry import RetryConfig, execute_with_retry
 

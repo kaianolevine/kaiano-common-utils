@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 import pytz
-from kaiano_common_utils import config
-from kaiano_common_utils import logger as log
+
+from kaiano import config
+from kaiano import logger as log
 
 log = log.get_logger()
 

@@ -2,7 +2,7 @@ import os
 import re
 from typing import Dict, List, Optional
 
-import kaiano_common_utils.logger as log
+from kaiano import logger as log
 
 
 def new_sanitize_filename(value: str) -> str:
