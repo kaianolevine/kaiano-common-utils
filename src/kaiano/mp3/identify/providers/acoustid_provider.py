@@ -46,7 +46,8 @@ class AcoustIdIdentifier:
 
         for attempt in range(1, self.retries + 1):
             try:
-                results = acoustid.match(self.api_key, path)
+                # acoustid.match may return an iterator/generator depending on version
+                results = list(acoustid.match(self.api_key, path))
                 log.info(
                     f"[ACOUSTID-RAW] {basename}: match() returned {len(results)} rows"
                 )
