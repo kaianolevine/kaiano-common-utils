@@ -60,7 +60,7 @@ class AcoustIdIdentifier:
                         score_f = 0.0
 
                     log.info(
-                        f"[ACOUSTID-RAW] {basename}: score={score_f:.3f} mbid={recording_id!r} artist={artist!r} title={title!r}"
+                        f"[ACOUSTID-RAW] score={score_f:.3f} mbid={recording_id!r} artist={artist!r} title={title!r}"
                     )
 
                     if not recording_id:
