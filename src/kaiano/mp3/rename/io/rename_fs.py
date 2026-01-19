@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
@@ -21,6 +23,55 @@ def _safe_filename_component_fallback(value: Optional[str]) -> str:
     for ch in bad:
         s = s.replace(ch, "")
     return s
+
+
+def safe_str(v: Any) -> str:
+    """Best-effort stringify without turning missing values into the literal 'None'."""
+    if v is None:
+        return ""
+    try:
+        s = str(v)
+    except Exception:
+        return ""
+    # Some tag wrappers stringify missing values as "None"
+    if s.strip().lower() == "none":
+        return ""
+    return s
+
+
+def safe_filename_component(v: Any) -> str:
+    """
+    Normalize a value for safe, deterministic filenames.
+
+    Rules:
+    - Convert to string
+    - Strip accents / diacritics
+    - Lowercase
+    - Remove all whitespace
+    - Remove all non-alphanumeric characters (except underscore)
+    - Collapse multiple underscores
+    """
+    s = safe_str(v)
+
+    if not s:
+        return ""
+
+    # Normalize unicode (e.g. Beyoncé -> Beyonce)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+
+    s = s.lower()
+
+    # Remove whitespace entirely
+    s = re.sub(r"\s+", "", s)
+
+    # Replace any remaining invalid chars with underscore
+    s = re.sub(r"[^a-z0-9_]", "_", s)
+
+    # Collapse multiple underscores
+    s = re.sub(r"_+", "_", s)
+
+    return s.strip("_")
 
 
 def _safe_component(value: Optional[str]) -> str:
