@@ -15,7 +15,7 @@ from .identify import (
     TrackId,
     TrackMetadata,
 )
-from .rename import Mp3Renamer, RenameProposal, RenameResult
+from .rename import Mp3Renamer
 from .tag import Mp3Tagger, TagSnapshot
 
 __all__ = [
@@ -27,6 +27,4 @@ __all__ = [
     "Mp3Tagger",
     "TagSnapshot",
     "Mp3Renamer",
-    "RenameProposal",
-    "RenameResult",
 ]

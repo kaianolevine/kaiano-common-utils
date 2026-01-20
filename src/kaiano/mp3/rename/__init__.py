@@ -8,6 +8,6 @@ Public API:
 - RenameResult
 """
 
-from .renamer import Mp3Renamer, RenameProposal, RenameResult
+from .renamer import Mp3Renamer
 
-__all__ = ["Mp3Renamer", "RenameProposal", "RenameResult"]
+__all__ = ["Mp3Renamer"]

@@ -11,16 +11,44 @@ def test_safe_filename_component_normalizes_unicode_and_strips_chars():
     assert safe_filename_component("!!!") == ""
 
 
-def test_mp3_renamer_rename_uses_metadata_and_reports_renamed(tmp_path):
+def test_rename_facade_build_filename_is_side_effect_free(tmp_path):
+    from kaiano.mp3.rename.io.rename_fs import RenameFacade
+
+    f = tmp_path / "My Song.mp3"
+    f.write_text("x")
+
+    facade = RenameFacade()
+
+    # New API
+    name = facade.build_filename(str(f), title="My Song", artist="The Artist")
+    assert name.endswith(".mp3")
+
+    # Legacy alias returns the same string
+    name2 = facade.rename(str(f), title="My Song", artist="The Artist")
+    assert name2 == name
+
+    # No filesystem side effects
+    assert os.path.exists(str(f))
+
+
+def test_mp3_renamer_rename_returns_filename_and_has_no_filesystem_side_effects(
+    tmp_path,
+):
     from kaiano.mp3.rename.renamer import Mp3Renamer
 
     f = tmp_path / "orig.mp3"
     f.write_text("x")
 
     r = Mp3Renamer()
-    result = r.rename(str(f), metadata={"title": "T", "artist": "A"})
-    assert result.renamed is True
-    assert os.path.exists(result.dest_path)
+    name = r.rename(str(f), metadata={"title": "T", "artist": "A"})
+
+    # Renamer returns a destination *filename* only (no rename on disk).
+    assert name.endswith(".mp3")
+    assert "T" in name or "t" in name
+    assert "A" in name or "a" in name
+
+    # Original file remains unchanged.
+    assert os.path.exists(str(f))
 
 
 def test_mp3_renamer_sanitize_string_collapses_whitespace_and_strips_special_chars():

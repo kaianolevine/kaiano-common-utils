@@ -88,21 +88,40 @@ class RenameProposal:
 
 
 class RenameFacade:
-    """Local-only filename proposal + rename application.
+    """Local-only filename proposal (no rename on disk).
 
     This module does not depend on identify/tag types.
+
+    Provides a single-call build_filename method that computes a destination filename (no filesystem side effects).
     """
 
-    def propose(
+    def build_filename(
         self,
         path: str,
         *,
+        metadata: Mapping[str, Any] | None = None,
         title: Optional[str] = None,
         artist: Optional[str] = None,
         template: str = "{title}_{artist}",
         fallback_to_original: bool = True,
-    ) -> RenameProposal:
-        base_dir = os.path.dirname(path)
+    ) -> str:
+        """Compute the destination filename for a path.
+
+        Intent (confirmed): callers provide title/artist (or metadata containing them)
+        and receive a single filename string; there is no propose/apply flow and no
+        filesystem side effects.
+
+        Behavior:
+        - If `metadata` is provided, title/artist fall back to metadata values.
+        - If both sanitized title and artist are present, build the filename from the template.
+        - Otherwise, if `fallback_to_original` is True, keep the original filename.
+        """
+
+        if metadata is not None:
+            # Mapping-like; prefer explicit args and fall back to metadata.
+            title = title or (metadata.get("title") if hasattr(metadata, "get") else None)  # type: ignore[arg-type]
+            artist = artist or (metadata.get("artist") if hasattr(metadata, "get") else None)  # type: ignore[arg-type]
+
         original_name = os.path.basename(path)
         _, ext = os.path.splitext(original_name)
 
@@ -110,16 +129,11 @@ class RenameFacade:
         artist_part = _safe_component(artist)
 
         if title_part and artist_part:
-            name = template.format(title=title_part, artist=artist_part) + ext
-        elif fallback_to_original:
-            name = original_name
-        else:
-            name = original_name
+            return template.format(title=title_part, artist=artist_part) + ext
 
-        dest_path = os.path.join(base_dir, name)
-        return RenameProposal(src_path=path, dest_path=dest_path, dest_name=name)
+        return original_name if fallback_to_original else original_name
 
-    def apply(
+    def rename(
         self,
         path: str,
         metadata: Mapping[str, Any] | None = None,
@@ -127,15 +141,17 @@ class RenameFacade:
         title: Optional[str] = None,
         artist: Optional[str] = None,
         template: str = "{title}_{artist}",
+        fallback_to_original: bool = True,
     ) -> str:
-        if metadata is not None:
-            title = title or (metadata.get("title") if hasattr(metadata, "get") else None)  # type: ignore[arg-type]
-            artist = artist or (metadata.get("artist") if hasattr(metadata, "get") else None)  # type: ignore[arg-type]
+        """Legacy alias; prefer `build_filename(...)`.
 
-        proposal = self.propose(path, title=title, artist=artist, template=template)
-
-        if proposal.dest_path != proposal.src_path:
-            os.rename(proposal.src_path, proposal.dest_path)
-            return proposal.dest_path
-
-        return proposal.src_path
+        Kept to avoid breaking older callers; returns the destination filename string.
+        """
+        return self.build_filename(
+            path,
+            metadata=metadata,
+            title=title,
+            artist=artist,
+            template=template,
+            fallback_to_original=fallback_to_original,
+        )

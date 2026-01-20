@@ -1,24 +1,15 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 from .io.rename_fs import RenameFacade
 
 
-@dataclass(frozen=True)
-class RenameResult:
-    src_path: str
-    dest_path: str
-    dest_name: str
-    renamed: bool
-
-
 class Mp3Renamer:
-    """Rename local MP3 files based on metadata (prefer the single-call rename() API).
+    """Compute filenames for local MP3 files based on metadata.
 
-    This module is fully self-contained (no dependency on identify/tag).
+    This class only computes destination filenames and does not perform any filesystem operations.
 
     Metadata contract:
     - accepts a mapping (dict-like) with optional keys: title, artist
@@ -36,24 +27,13 @@ class Mp3Renamer:
         artist: Optional[str] = None,
         template: str = "{title}_{artist}",
         fallback_to_original: bool = True,
-    ) -> RenameResult:
-        """Rename a file and return the result.
-
-        Intent (confirmed): callers should be able to provide metadata/title/artist and
-        receive a single, fully-populated result without a two-step propose/apply flow.
-
-        Notes:
-        - Explicit `title`/`artist` override values from `metadata`.
-        - `template` controls the output name.
-        - If the destination name cannot be constructed (missing fields),
-          `fallback_to_original=True` keeps the original name.
-        """
-
+    ) -> str:
         if metadata is not None:
             title = title or metadata.get("title")  # type: ignore[arg-type]
             artist = artist or metadata.get("artist")  # type: ignore[arg-type]
 
-        proposal = self._rename.propose(
+        # Delegate filename construction to the facade, but do NOT rename on disk
+        name = self._rename.build_filename(
             path,
             title=title,
             artist=artist,
@@ -61,20 +41,7 @@ class Mp3Renamer:
             fallback_to_original=fallback_to_original,
         )
 
-        dest = self._rename.apply(
-            path,
-            metadata=metadata,
-            title=title,
-            artist=artist,
-            template=template,
-        )
-
-        return RenameResult(
-            src_path=proposal.src_path,
-            dest_path=dest,
-            dest_name=proposal.dest_name,
-            renamed=dest != proposal.src_path,
-        )
+        return name
 
     @staticmethod
     def sanitize_string(v: Any) -> str:
