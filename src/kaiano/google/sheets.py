@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from googleapiclient.errors import HttpError
 
@@ -288,3 +288,11 @@ class SheetsFacade:
         if end_row is None:
             return f"{start_col}{start_row}:{end_col}"
         return f"{start_col}{start_row}:{end_col}{end_row}"
+
+    @staticmethod
+    def normalize_cell(v: Any) -> str:
+        return "" if v is None else str(v).strip()
+
+    @staticmethod
+    def normalize_row(row: Sequence[Any]) -> list[str]:
+        return [SheetsFacade.normalize_cell(v) for v in row]

@@ -35,3 +35,59 @@ class Mp3Tagger:
 
     def dump(self, path: str) -> Dict[str, str]:
         return self._io.dump_tags(path)
+
+    @staticmethod
+    def sanitize_string(v: Any) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @staticmethod
+    def build_routine_tag_title(
+        *, leader_first: str, leader_last: str, follower_first: str, follower_last: str
+    ) -> str:
+        """Build the routine title tag.
+
+        Intended behavior:
+        - Post-sanitization empty strings are treated as missing values
+        - If both leader and follower are present: "Leader First Leader Last & Follower First Follower Last"
+        - If only one side is present: return that name only (no dangling '&')
+        - If all inputs are empty: return ""
+        """
+
+        leader_parts = [
+            Mp3Tagger.sanitize_string(leader_first),
+            Mp3Tagger.sanitize_string(leader_last),
+        ]
+        leader_parts = [p for p in leader_parts if p]
+        leader = " ".join(leader_parts)
+
+        follower_parts = [
+            Mp3Tagger.sanitize_string(follower_first),
+            Mp3Tagger.sanitize_string(follower_last),
+        ]
+        follower_parts = [p for p in follower_parts if p]
+        follower = " ".join(follower_parts)
+
+        if leader and follower:
+            return f"{leader} & {follower}"
+        return leader or follower
+
+    @staticmethod
+    def build_routine_tag_artist(
+        *,
+        version: str,
+        division: str,
+        season_year: str,
+        routine_name: str,
+        personal_descriptor: str,
+    ) -> str:
+        base = f"v{Mp3Tagger.sanitize_string(version)} | {Mp3Tagger.sanitize_string(division)} {Mp3Tagger.sanitize_string(season_year)}".strip()
+        parts = [base]
+        rn = Mp3Tagger.sanitize_string(routine_name)
+        pd = Mp3Tagger.sanitize_string(personal_descriptor)
+        if rn:
+            parts.append(rn)
+        if pd:
+            parts.append(pd)
+        return " | ".join([p for p in parts if p])

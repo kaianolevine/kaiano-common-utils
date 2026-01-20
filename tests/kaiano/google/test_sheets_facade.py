@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from kaiano.google.sheets import SheetsFacade
+
 
 class _Exec:
     def __init__(self, fn):
@@ -87,7 +89,6 @@ class FakeSheetsService:
 
 
 def test_read_values_casts_to_strings(monkeypatch):
-    from kaiano.google.sheets import SheetsFacade
 
     svc = FakeSheetsService()
     svc.values_store["Sheet1!A1:C2"] = [[1, None, True]]
@@ -98,7 +99,6 @@ def test_read_values_casts_to_strings(monkeypatch):
 
 
 def test_ensure_sheet_exists_adds_sheet_and_headers(monkeypatch):
-    from kaiano.google.sheets import SheetsFacade
 
     svc = FakeSheetsService()
     # Remove target sheet from metadata so ensure_sheet_exists creates it
@@ -113,7 +113,6 @@ def test_ensure_sheet_exists_adds_sheet_and_headers(monkeypatch):
 
 
 def test_get_sheet_id_success_and_failure(monkeypatch):
-    from kaiano.google.sheets import SheetsFacade
 
     svc = FakeSheetsService()
     sheets = SheetsFacade(svc)
@@ -129,7 +128,6 @@ def test_get_sheet_id_success_and_failure(monkeypatch):
 
 def test_delete_sheet_by_name_ignores_http_error(monkeypatch, as_http_error):
     from kaiano.google._retry import RetryConfig
-    from kaiano.google.sheets import SheetsFacade
 
     # Avoid real sleeps from execute_with_retry() while simulating 5xx
     monkeypatch.setattr("kaiano.google._retry.time.sleep", lambda _s: None)
@@ -158,7 +156,6 @@ def test_delete_sheet_by_name_ignores_http_error(monkeypatch, as_http_error):
 
 
 def test_clear_all_except_one_sheet_creates_then_deletes_and_clears(monkeypatch):
-    from kaiano.google.sheets import SheetsFacade
 
     svc = FakeSheetsService()
     # metadata has no 'Keep' sheet
@@ -175,14 +172,12 @@ def test_clear_all_except_one_sheet_creates_then_deletes_and_clears(monkeypatch)
 
 
 def test_get_range_format():
-    from kaiano.google.sheets import SheetsFacade
 
     assert SheetsFacade.get_range_format("A", 5, "D") == "A5:D"
     assert SheetsFacade.get_range_format("A", 5, "D", 10) == "A5:D10"
 
 
 def test_get_metadata_retries_transient_then_succeeds(monkeypatch, as_http_error):
-    from kaiano.google.sheets import SheetsFacade
 
     monkeypatch.setattr("kaiano.google._retry.time.sleep", lambda _s: None)
     monkeypatch.setattr("kaiano.google._retry.random.random", lambda: 0.0)
@@ -214,7 +209,6 @@ def test_get_metadata_retries_transient_then_succeeds(monkeypatch, as_http_error
 
 
 def test_get_metadata_exhausts_transient_and_raises(monkeypatch, as_http_error):
-    from kaiano.google.sheets import SheetsFacade
 
     monkeypatch.setattr("kaiano.google._retry.time.sleep", lambda _s: None)
     monkeypatch.setattr("kaiano.google._retry.random.random", lambda: 0.0)
@@ -245,9 +239,47 @@ def test_get_metadata_exhausts_transient_and_raises(monkeypatch, as_http_error):
 
 def test_get_metadata_falls_back_to_execute_with_retry(monkeypatch):
     """If max_retries is 0, the manual retry loop is skipped."""
-    from kaiano.google.sheets import SheetsFacade
 
     svc = FakeSheetsService()
     sheets = SheetsFacade(svc)
     meta = sheets.get_metadata("ssid", max_retries=0)
     assert meta["sheets"][1]["properties"]["title"] == "Other"
+
+
+def test_normalize_cell_handles_none_and_whitespace():
+    assert SheetsFacade.normalize_cell(None) == ""
+    assert SheetsFacade.normalize_cell("") == ""
+    assert SheetsFacade.normalize_cell("   ") == ""
+    assert SheetsFacade.normalize_cell("  hello  ") == "hello"
+    assert SheetsFacade.normalize_cell("\tworld\n") == "world"
+    assert SheetsFacade.normalize_cell(123) == "123"
+
+
+def test_normalize_row_normalizes_each_cell():
+    row = [None, "  a ", 5, "\t b\n", "", "  "]
+    assert SheetsFacade.normalize_row(row) == [
+        "",
+        "a",
+        "5",
+        "b",
+        "",
+        "",
+    ]
+
+
+def test_normalize_row_preserves_length_and_order():
+    row = ["a", None, "b", None]
+    result = SheetsFacade.normalize_row(row)
+
+    assert len(result) == 4
+    assert result == ["a", "", "b", ""]
+
+
+def test_get_range_format_without_end_row():
+    assert SheetsFacade.get_range_format("A", 1, "D") == "A1:D"
+    assert SheetsFacade.get_range_format("B", 5, "Z") == "B5:Z"
+
+
+def test_get_range_format_with_end_row():
+    assert SheetsFacade.get_range_format("A", 1, "D", 10) == "A1:D10"
+    assert SheetsFacade.get_range_format("AA", 3, "AB", 7) == "AA3:AB7"

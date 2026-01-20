@@ -2,6 +2,8 @@ import importlib
 import sys
 import types
 
+from kaiano.mp3.tag.tagger import Mp3Tagger
+
 
 def _install(name: str, module: types.ModuleType) -> None:
     sys.modules[name] = module
@@ -141,7 +143,6 @@ def test_music_tag_io_read_write_and_dump(tmp_path, monkeypatch):
 
 def test_mp3_tagger_is_thin_wrapper(monkeypatch):
     from kaiano.mp3.tag.models import TagSnapshot
-    from kaiano.mp3.tag.tagger import Mp3Tagger
 
     class IO:
         def __init__(self):
@@ -163,3 +164,128 @@ def test_mp3_tagger_is_thin_wrapper(monkeypatch):
     assert t.read("p").tags == {"a": "b"}
     t.write("p", {"title": "t"}, ensure_virtualdj_compat=True)
     assert t.dump("p") == {"x": "y"}
+
+
+# ---------------------------------------------------------------------------
+# sanitize_string
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_string_handles_none_and_whitespace():
+    assert Mp3Tagger.sanitize_string(None) == ""
+    assert Mp3Tagger.sanitize_string("") == ""
+    assert Mp3Tagger.sanitize_string("   ") == ""
+    assert Mp3Tagger.sanitize_string("  hello  ") == "hello"
+    assert Mp3Tagger.sanitize_string("\tworld\n") == "world"
+    assert Mp3Tagger.sanitize_string(123) == "123"
+
+
+def test_sanitize_string_is_idempotent():
+    v = "hello"
+    assert Mp3Tagger.sanitize_string(v) == Mp3Tagger.sanitize_string(
+        Mp3Tagger.sanitize_string(v)
+    )
+
+
+# ---------------------------------------------------------------------------
+# build_routine_tag_title
+# ---------------------------------------------------------------------------
+
+
+def test_build_routine_tag_title_leader_and_follower():
+    title = Mp3Tagger.build_routine_tag_title(
+        leader_first="Alice",
+        leader_last="Leader",
+        follower_first="Bob",
+        follower_last="Follower",
+    )
+    assert title == "Alice Leader & Bob Follower"
+
+
+def test_build_routine_tag_title_trims_whitespace():
+    title = Mp3Tagger.build_routine_tag_title(
+        leader_first="  Alice ",
+        leader_last=" Leader ",
+        follower_first=" Bob",
+        follower_last="Follower  ",
+    )
+    assert title == "Alice Leader & Bob Follower"
+
+
+def test_build_routine_tag_title_leader_only():
+    title = Mp3Tagger.build_routine_tag_title(
+        leader_first="Alice",
+        leader_last="Leader",
+        follower_first="",
+        follower_last="",
+    )
+    assert title == "Alice Leader"
+
+
+def test_build_routine_tag_title_follower_only():
+    title = Mp3Tagger.build_routine_tag_title(
+        leader_first="",
+        leader_last="",
+        follower_first="Bob",
+        follower_last="Follower",
+    )
+    assert title == "Bob Follower"
+
+
+def test_build_routine_tag_title_all_empty():
+    title = Mp3Tagger.build_routine_tag_title(
+        leader_first="",
+        leader_last="",
+        follower_first="",
+        follower_last="",
+    )
+    assert title == ""
+
+
+# ---------------------------------------------------------------------------
+# build_routine_tag_artist
+# ---------------------------------------------------------------------------
+
+
+def test_build_routine_tag_artist_all_fields_present():
+    artist = Mp3Tagger.build_routine_tag_artist(
+        version="1",
+        division="Novice",
+        season_year="2025",
+        routine_name="My Routine",
+        personal_descriptor="Practice",
+    )
+    assert artist == "v1 | Novice 2025 | My Routine | Practice"
+
+
+def test_build_routine_tag_artist_optional_fields_missing():
+    artist = Mp3Tagger.build_routine_tag_artist(
+        version="2",
+        division="Advanced",
+        season_year="2026",
+        routine_name="",
+        personal_descriptor="",
+    )
+    assert artist == "v2 | Advanced 2026"
+
+
+def test_build_routine_tag_artist_trims_and_sanitizes():
+    artist = Mp3Tagger.build_routine_tag_artist(
+        version=" 3 ",
+        division=" Advanced ",
+        season_year=" 2027 ",
+        routine_name="  Showcase ",
+        personal_descriptor="  Finals ",
+    )
+    assert artist == "v3 | Advanced 2027 | Showcase | Finals"
+
+
+def test_build_routine_tag_artist_never_returns_empty_string_when_base_present():
+    artist = Mp3Tagger.build_routine_tag_artist(
+        version="1",
+        division="Open",
+        season_year="2024",
+        routine_name="",
+        personal_descriptor="",
+    )
+    assert artist.startswith("v1 | Open 2024")
