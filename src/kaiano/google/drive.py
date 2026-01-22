@@ -256,7 +256,11 @@ class DriveFacade:
     ) -> None:
         file_meta = execute_with_retry(
             lambda: self._service.files()
-            .get(fileId=file_id, fields="parents")
+            .get(
+                fileId=file_id,
+                fields="parents",
+                supportsAllDrives=True,
+            )
             .execute(),
             context=f"getting parents for file {file_id}",
             retry=self._retry,
@@ -268,6 +272,7 @@ class DriveFacade:
             "addParents": new_parent_id,
             "fields": "id, parents",
             "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
         }
         if remove_from_parents and previous_parents:
             kwargs["removeParents"] = previous_parents
