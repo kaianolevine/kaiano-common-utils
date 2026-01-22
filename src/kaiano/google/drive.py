@@ -272,7 +272,6 @@ class DriveFacade:
             "addParents": new_parent_id,
             "fields": "id, parents",
             "supportsAllDrives": True,
-            "includeItemsFromAllDrives": True,
         }
         if remove_from_parents and previous_parents:
             kwargs["removeParents"] = previous_parents
