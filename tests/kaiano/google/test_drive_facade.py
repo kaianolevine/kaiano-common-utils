@@ -83,8 +83,22 @@ class FakeDriveService:
                 svc._copied_ids.append(new_id)
                 return _Exec(lambda: {"id": new_id})
 
-            def get(self, fileId=None, fields=None):
-                svc.calls.append(("get", fileId, fields))
+            def get(
+                self,
+                fileId=None,
+                fields=None,
+                supportsAllDrives=None,
+                includeItemsFromAllDrives=None,
+            ):
+                svc.calls.append(
+                    (
+                        "get",
+                        fileId,
+                        fields,
+                        supportsAllDrives,
+                        includeItemsFromAllDrives,
+                    )
+                )
                 return _Exec(lambda: {"parents": svc._parents.get(fileId, [])})
 
             def update(self, **kwargs):
