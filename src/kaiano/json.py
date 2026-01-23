@@ -1,6 +1,6 @@
-import datetime
 import json
 import os
+from datetime import datetime
 
 
 def create_collection_snapshot(root_key: str) -> dict:
