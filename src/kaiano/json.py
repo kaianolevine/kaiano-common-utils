@@ -1,6 +1,6 @@
+import datetime
 import json
 import os
-from datetime import datetime
 
 
 def create_collection_snapshot(root_key: str) -> dict:
@@ -8,7 +8,7 @@ def create_collection_snapshot(root_key: str) -> dict:
     Create the base JSON snapshot structure for the DJ set collection export.
     """
     return {
-        "generated_at": datetime.now(datetime.timezone.utc).isoformat(),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         root_key: [],
     }
 
