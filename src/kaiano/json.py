@@ -3,14 +3,13 @@ import json
 import os
 
 
-def create_collection_snapshot(parent_folder_id: str) -> dict:
+def create_collection_snapshot(root_key: str) -> dict:
     """
     Create the base JSON snapshot structure for the DJ set collection export.
     """
     return {
         "generated_at": datetime.now(datetime.timezone.utc).isoformat(),
-        "dj_sets_folder_id": parent_folder_id,
-        "folders": [],
+        root_key: [],
     }
 
 
