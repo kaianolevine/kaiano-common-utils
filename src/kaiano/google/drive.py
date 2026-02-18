@@ -295,6 +295,30 @@ class DriveFacade:
             while not done:
                 _status, done = downloader.next_chunk()
 
+    def export_file(self, file_id: str, *, mime_type: str) -> bytes:
+        """Export a Google Workspace file (Docs/Sheets/Slides) as bytes.
+
+        Uses Drive `files.export`, which only works for Google-native formats.
+        """
+
+        data = execute_with_retry(
+            lambda: self._service.files()
+            .export(fileId=file_id, mimeType=mime_type)
+            .execute(),
+            context=f"exporting file {file_id} as {mime_type}",
+            retry=self._retry,
+        )
+        if isinstance(data, (bytes, bytearray)):
+            return bytes(data)
+        return str(data).encode("utf-8")
+
+    def export_google_doc_as_text(self, file_id: str) -> str:
+        """Export a Google Doc as plain text."""
+
+        return self.export_file(file_id, mime_type="text/plain").decode(
+            "utf-8", errors="replace"
+        )
+
     def upload_file(
         self,
         filepath: str,
