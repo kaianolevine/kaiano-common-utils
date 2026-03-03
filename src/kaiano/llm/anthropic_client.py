@@ -50,28 +50,42 @@ class AnthropicLLM(LLMClient):
         except Exception:
             pass
 
-        try:
-            content = getattr(resp, "content", None) or []
-            parts = []
-            for block in content:
-                if isinstance(block, dict):
-                    if block.get("type") == "text":
-                        text = block.get("text", "") or ""
-                        if isinstance(text, str) and text.strip():
-                            parts.append(text)
-                else:
-                    if getattr(block, "type", None) == "text":
-                        text = getattr(block, "text", "") or ""
-                        if isinstance(text, str) and text.strip():
-                            parts.append(text)
-            out = "\n".join(parts).strip()
-            if out:
-                return out
-        except Exception:
-            pass
+        # Some SDK/API versions wrap the message in .message
+        msg = resp
+        if getattr(resp, "message", None) is not None:
+            msg = resp.message
+        content = getattr(msg, "content", None) or []
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    text = block.get("text", "") or ""
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text)
+            else:
+                if getattr(block, "type", None) == "text":
+                    text = getattr(block, "text", None)
+                    if text is None and hasattr(block, "__getitem__"):
+                        try:
+                            text = block["text"]
+                        except (KeyError, TypeError):
+                            text = None
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text)
+        out = "\n".join(parts).strip()
+        if out:
+            return out
 
+        # Diagnostic: include what we saw so we can fix extraction
+        block_types = []
+        for b in content[:5]:
+            if isinstance(b, dict):
+                block_types.append(b.get("type", type(b).__name__))
+            else:
+                block_types.append(getattr(b, "type", type(b).__name__))
         raise LLMError(
-            "Unable to extract text from Anthropic response (no text content blocks)"
+            "Unable to extract text from Anthropic response "
+            f"(content has {len(content)} blocks, types={block_types})"
         )
 
     def generate_json(
@@ -111,6 +125,11 @@ class AnthropicLLM(LLMClient):
             raise LLMError(f"Anthropic request failed: {e}") from e
 
         raw = self._extract_output_text(resp)
+        if not raw or not raw.strip():
+            raise LLMError(
+                "Anthropic returned empty or whitespace-only text; cannot parse JSON. "
+                "Check that the model is returning valid content blocks."
+            )
         data = parse_json(raw)
         validate_json(data, json_schema)
 
