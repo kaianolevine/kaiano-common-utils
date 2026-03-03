@@ -28,9 +28,10 @@ musicbrainzngs = "^0.7.1"
 
 # Optional: LLM providers
 openai = { version = "^1.40.0", optional = true }
+anthropic = { version = "^0.45.0", optional = true }
 
 [tool.poetry.extras]
-llm = ["openai"]
+llm = ["openai", "anthropic"]
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"
