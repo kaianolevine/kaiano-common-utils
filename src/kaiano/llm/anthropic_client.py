@@ -37,22 +37,42 @@ class AnthropicLLM(LLMClient):
         self._client = Anthropic(api_key=api_key)
 
     def _extract_output_text(self, resp: Any) -> str:
-        """Concatenate all text blocks from the Claude response."""
+        """Concatenate all text blocks from the Claude response.
+
+        Prefers the SDK's get_final_text() when available; otherwise handles
+        content blocks as objects or dicts depending on SDK version.
+        """
+        try:
+            if callable(getattr(resp, "get_final_text", None)):
+                text = resp.get_final_text()
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+        except Exception:
+            pass
 
         try:
+            content = getattr(resp, "content", None) or []
             parts = []
-            for block in getattr(resp, "content", []) or []:
-                if getattr(block, "type", None) == "text":
-                    text = getattr(block, "text", "")
-                    if isinstance(text, str) and text.strip():
-                        parts.append(text)
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        text = block.get("text", "") or ""
+                        if isinstance(text, str) and text.strip():
+                            parts.append(text)
+                else:
+                    if getattr(block, "type", None) == "text":
+                        text = getattr(block, "text", "") or ""
+                        if isinstance(text, str) and text.strip():
+                            parts.append(text)
             out = "\n".join(parts).strip()
             if out:
                 return out
         except Exception:
             pass
 
-        raise LLMError("Unable to extract text from Anthropic response")
+        raise LLMError(
+            "Unable to extract text from Anthropic response (no text content blocks)"
+        )
 
     def generate_json(
         self,
