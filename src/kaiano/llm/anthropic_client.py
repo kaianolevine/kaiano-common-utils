@@ -130,7 +130,16 @@ class AnthropicLLM(LLMClient):
                 "Anthropic returned empty or whitespace-only text; cannot parse JSON. "
                 "Check that the model is returning valid content blocks."
             )
-        data = parse_json(raw)
+        # Strip markdown code fence if present (e.g. ```json ... ```)
+        s = raw.strip()
+        if s.startswith("```"):
+            lines = s.split("\n")
+            if lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            s = "\n".join(lines)
+        data = parse_json(s)
         validate_json(data, json_schema)
 
         return LLMResult(
