@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 from typing import Any
 
@@ -11,6 +12,30 @@ from .errors import LLMError
 from .types import LLMMessage, LLMResult
 
 log = logger_mod.get_logger()
+
+
+def _schema_strict_for_api(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return a deep copy of the schema with additionalProperties: False everywhere.
+
+    OpenAI Responses API requires every object to have additionalProperties false.
+    We use this only for the API request; validation still uses the original
+    flexible schema so extra keys from other providers are accepted.
+    """
+    out = copy.deepcopy(schema)
+    out["additionalProperties"] = False
+
+    def fix(o: Any) -> None:
+        if isinstance(o, dict):
+            if o.get("type") == "object" and "properties" in o:
+                o["additionalProperties"] = False
+            for v in o.values():
+                fix(v)
+        elif isinstance(o, list):
+            for x in o:
+                fix(x)
+
+    fix(out)
+    return out
 
 
 class OpenAILLM(LLMClient):
@@ -63,8 +88,9 @@ class OpenAILLM(LLMClient):
         json_schema: dict[str, Any],
         schema_name: str = "output",
     ) -> LLMResult:
-        # Prefer Responses API Structured Outputs
+        # Prefer Responses API Structured Outputs (use strict schema so API accepts it)
         try:
+            strict_schema = _schema_strict_for_api(json_schema)
             resp = self._client.responses.create(
                 model=self._cfg.model,
                 input=[{"role": m.role, "content": m.content} for m in messages],
@@ -72,7 +98,7 @@ class OpenAILLM(LLMClient):
                     "format": {
                         "type": "json_schema",
                         "name": schema_name,
-                        "schema": json_schema,
+                        "schema": strict_schema,
                         "strict": True,
                     }
                 },
