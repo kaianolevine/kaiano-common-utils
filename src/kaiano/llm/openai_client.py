@@ -15,11 +15,12 @@ log = logger_mod.get_logger()
 
 
 def _schema_strict_for_api(schema: dict[str, Any]) -> dict[str, Any]:
-    """Return a deep copy of the schema with additionalProperties: False everywhere.
+    """Return a deep copy of the schema shaped for OpenAI Responses API.
 
-    OpenAI Responses API requires every object to have additionalProperties false.
-    We use this only for the API request; validation still uses the original
-    flexible schema so extra keys from other providers are accepted.
+    The API requires:
+    - Every object has additionalProperties: false.
+    - Every object with properties has required: [all property keys].
+    We use this only for the API request; validation uses the original schema.
     """
     out = copy.deepcopy(schema)
     out["additionalProperties"] = False
@@ -28,6 +29,7 @@ def _schema_strict_for_api(schema: dict[str, Any]) -> dict[str, Any]:
         if isinstance(o, dict):
             if o.get("type") == "object" and "properties" in o:
                 o["additionalProperties"] = False
+                o["required"] = list(o["properties"].keys())
             for v in o.values():
                 fix(v)
         elif isinstance(o, list):
