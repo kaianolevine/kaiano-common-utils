@@ -20,6 +20,7 @@ def _schema_strict_for_api(schema: dict[str, Any]) -> dict[str, Any]:
     The API requires:
     - Every object has additionalProperties: false.
     - Every object with properties has required: [all property keys].
+    - oneOf is not permitted; we replace it with the first subschema.
     We use this only for the API request; validation uses the original schema.
     """
     out = copy.deepcopy(schema)
@@ -27,6 +28,12 @@ def _schema_strict_for_api(schema: dict[str, Any]) -> dict[str, Any]:
 
     def fix(o: Any) -> None:
         if isinstance(o, dict):
+            if "oneOf" in o and isinstance(o["oneOf"], list) and o["oneOf"]:
+                first = copy.deepcopy(o["oneOf"][0])
+                o.clear()
+                o.update(first)
+                fix(o)
+                return
             if o.get("type") == "object" and "properties" in o:
                 o["additionalProperties"] = False
                 o["required"] = list(o["properties"].keys())
