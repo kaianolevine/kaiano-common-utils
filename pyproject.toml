@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kaiano"
-version = "0.3.19"
+version = "0.3.20"
 description = "Common utility functions shared across Kaiano’s projects."
 authors = ["Kaiano Levine <kaiano@example.com>"]
 license = "MIT"
