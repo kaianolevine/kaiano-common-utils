@@ -208,10 +208,16 @@ class SheetsFacade:
                 break
 
         if keep_id is None:
-            self.batch_update(
-                spreadsheet_id,
-                [{"addSheet": {"properties": {"title": keep_title}}}],
-            )
+            try:
+                self.batch_update(
+                    spreadsheet_id,
+                    [{"addSheet": {"properties": {"title": keep_title}}}],
+                )
+            except HttpError as e:
+                msg = str(e).lower()
+                if "already exists" not in msg:
+                    raise
+
             meta = self.get_metadata(spreadsheet_id)
             sheets_list = meta.get("sheets", [])
 
