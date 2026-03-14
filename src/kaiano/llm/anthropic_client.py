@@ -114,7 +114,7 @@ class AnthropicLLM(LLMClient):
         try:
             resp = self._client.messages.create(
                 model=self._cfg.model,
-                max_tokens=4096,
+                max_tokens=8192,
                 system=system_prompt,
                 messages=[
                     {"role": m.role, "content": m.content} for m in non_system_messages
