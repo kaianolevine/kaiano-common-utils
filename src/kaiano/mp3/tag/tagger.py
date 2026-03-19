@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from .io.music_tag_io import MusicTagIO
 from .models import TagSnapshot
@@ -18,7 +19,7 @@ class Mp3Tagger:
       disc_number, bpm
     """
 
-    def __init__(self, io: Optional[MusicTagIO] = None):
+    def __init__(self, io: MusicTagIO | None = None):
         self._io = io or MusicTagIO()
 
     def read(self, path: str) -> TagSnapshot:
@@ -33,7 +34,7 @@ class Mp3Tagger:
     ) -> None:
         self._io.write(path, metadata, ensure_virtualdj_compat=ensure_virtualdj_compat)
 
-    def dump(self, path: str) -> Dict[str, str]:
+    def dump(self, path: str) -> dict[str, str]:
         return self._io.dump_tags(path)
 
     @staticmethod

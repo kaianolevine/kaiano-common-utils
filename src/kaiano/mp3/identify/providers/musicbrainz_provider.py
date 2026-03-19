@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import musicbrainzngs
 
@@ -36,7 +36,7 @@ class MusicBrainzRecordingProvider:
             time.sleep(self.throttle_s - delta)
         self._last_call_ts = time.time()
 
-    def _best_genre(self, tags: list[dict[str, Any]] | None) -> Optional[str]:
+    def _best_genre(self, tags: list[dict[str, Any]] | None) -> str | None:
         if not tags:
             return None
         try:
@@ -58,7 +58,7 @@ class MusicBrainzRecordingProvider:
                 f"got {track_id.provider!r}"
             )
 
-        last_err: Optional[Exception] = None
+        last_err: Exception | None = None
         for attempt in range(1, self.retries + 1):
             try:
                 self._throttle()
@@ -66,7 +66,7 @@ class MusicBrainzRecordingProvider:
                     track_id.id,
                     includes=["artists", "releases", "isrcs", "tags"],
                 )
-                r: Dict[str, Any] = (
+                r: dict[str, Any] = (
                     rec.get("recording", {}) if isinstance(rec, dict) else {}
                 )
 

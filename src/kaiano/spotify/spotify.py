@@ -22,11 +22,8 @@ def _sleep_backoff(attempt: int, base_seconds: int = 2) -> None:
 
 
 def _is_retryable_spotify_exception(e: SpotifyException) -> bool:
-    if e.http_status == 429:
-        return True
-    if e.http_status is not None and e.http_status >= 500:
-        return True
-    return False
+    status = e.http_status
+    return status == 429 or (status is not None and status >= 500)
 
 
 def _sleep_for_rate_limit(e: SpotifyException, default_seconds: int = 2) -> None:
@@ -62,7 +59,7 @@ class SpotifyAPI:
         self._client: Spotify | None = None
 
     @classmethod
-    def from_env(cls) -> "SpotifyAPI":
+    def from_env(cls) -> SpotifyAPI:
         return cls()
 
     @property
@@ -257,7 +254,7 @@ class SpotifyAPI:
             offset = 0
             while True:
                 resp = self._call_with_retry(
-                    lambda: sp.playlist_items(
+                    lambda offset=offset: sp.playlist_items(
                         playlist_id,
                         fields="items.track.uri,total,next",
                         additional_types=["track"],
@@ -304,7 +301,7 @@ class SpotifyAPI:
         try:
             while True:
                 response = self._call_with_retry(
-                    lambda: sp.playlist_items(
+                    lambda offset=offset: sp.playlist_items(
                         playlist_id,
                         fields="items.track.uri,total,next",
                         additional_types=["track"],
@@ -358,7 +355,7 @@ class SpotifyAPI:
 
     def trim_playlist_to_limit(self, limit: int = 200) -> None:
         if not config.SPOTIFY_PLAYLIST_ID:
-            raise EnvironmentError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
+            raise OSError("Missing SPOTIFY_PLAYLIST_ID environment variable.")
 
         sp = self.client
         current = self._call_with_retry(

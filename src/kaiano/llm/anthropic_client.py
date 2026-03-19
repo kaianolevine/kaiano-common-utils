@@ -100,6 +100,10 @@ class AnthropicLLM(LLMClient):
         system_parts: list[str] = []
         non_system_messages: list[LLMMessage] = []
 
+        # Kept for API parity with OpenAI structured output; Anthropic does not
+        # expose the schema name to the model.
+        _ = schema_name
+
         for m in messages:
             if m.role == "system":
                 system_parts.append(m.content)

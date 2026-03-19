@@ -13,11 +13,11 @@ def test_trim_playlist_to_limit_removes_old_tracks(monkeypatch):
     if cfg is None:
         cfg = types.ModuleType("kaiano.config")
         _install("kaiano.config", cfg)
-    setattr(cfg, "SPOTIPY_CLIENT_ID", "cid")
-    setattr(cfg, "SPOTIPY_CLIENT_SECRET", "secret")
-    setattr(cfg, "SPOTIPY_REFRESH_TOKEN", "refresh")
-    setattr(cfg, "SPOTIPY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
-    setattr(cfg, "SPOTIFY_PLAYLIST_ID", "pl-main")
+    cfg.SPOTIPY_CLIENT_ID = "cid"
+    cfg.SPOTIPY_CLIENT_SECRET = "secret"
+    cfg.SPOTIPY_REFRESH_TOKEN = "refresh"
+    cfg.SPOTIPY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+    cfg.SPOTIFY_PLAYLIST_ID = "pl-main"
 
     # requests + spotipy stubs (minimal)
     if "requests" not in sys.modules:
@@ -60,6 +60,7 @@ def test_trim_playlist_to_limit_removes_old_tracks(monkeypatch):
             self, playlist_id, fields=None, additional_types=None, limit=100, offset=0
         ):
             assert playlist_id == "pl-main"
+            _ = (fields, additional_types, limit, offset)
             # total=3, remove first (oldest) when limit=2
             return {
                 "total": 3,
@@ -71,6 +72,7 @@ def test_trim_playlist_to_limit_removes_old_tracks(monkeypatch):
             }
 
         def playlist_remove_all_occurrences_of_items(self, playlist_id, items):
+            _ = playlist_id
             self.removed = list(items)
             return {"snapshot_id": "r"}
 

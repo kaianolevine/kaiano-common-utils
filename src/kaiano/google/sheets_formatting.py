@@ -1,6 +1,6 @@
 import time
 from collections.abc import Iterable
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from googleapiclient.errors import HttpError
 
@@ -45,7 +45,7 @@ class SheetsFormatter:
     def _batch_update(
         self,
         spreadsheet_id: str,
-        requests: List[Dict[str, Any]],
+        requests: list[dict[str, Any]],
         *,
         operation: str,
         max_attempts: int = 5,
@@ -62,20 +62,22 @@ class SheetsFormatter:
 
     def _get_column_pixel_sizes(
         self, spreadsheet_id: str
-    ) -> Dict[int, List[Optional[int]]]:
+    ) -> dict[int, list[int | None]]:
         """Return {sheetId: [pixelSize,...]} using a minimal includeGridData fetch."""
         meta = execute_with_retry(
-            lambda: self.sheets_service.spreadsheets()
-            .get(
-                spreadsheetId=spreadsheet_id,
-                includeGridData=True,
-                fields="sheets(properties(sheetId,title),data(columnMetadata(pixelSize)))",
-            )
-            .execute(),
+            lambda: (
+                self.sheets_service.spreadsheets()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    includeGridData=True,
+                    fields="sheets(properties(sheetId,title),data(columnMetadata(pixelSize)))",
+                )
+                .execute()
+            ),
             context=f"fetching column pixel sizes for {spreadsheet_id}",
             retry=RetryConfig(max_attempts=5, max_delay_s=16.0),
         )
-        out: Dict[int, List[Optional[int]]] = {}
+        out: dict[int, list[int | None]] = {}
         for s in meta.get("sheets", []):
             props = s.get("properties", {})
             sid = props.get("sheetId")
@@ -83,7 +85,7 @@ class SheetsFormatter:
             if not sid or not data:
                 continue
             col_meta = (data[0] or {}).get("columnMetadata", []) or []
-            sizes: List[Optional[int]] = []
+            sizes: list[int | None] = []
             for cm in col_meta:
                 ps = cm.get("pixelSize")
                 sizes.append(int(ps) if ps is not None else None)
@@ -94,12 +96,12 @@ class SheetsFormatter:
         self,
         *,
         spreadsheet_id: str,
-        sheets_metadata: List[Dict[str, Any]],
+        sheets_metadata: list[dict[str, Any]],
     ) -> None:
         """Apply a small pixel buffer to auto-resized columns, capped at a max width."""
         try:
             pixel_sizes_by_sheet = self._get_column_pixel_sizes(spreadsheet_id)
-            width_requests: List[Dict[str, Any]] = []
+            width_requests: list[dict[str, Any]] = []
             for s in sheets_metadata:
                 props = s.get("properties", {})
                 sheet_id_raw = props.get("sheetId")
@@ -156,7 +158,7 @@ class SheetsFormatter:
             )
             if num_columns < 1:
                 num_columns = DEFAULT_NUM_COLUMNS
-            requests: List[Dict[str, Any]] = [
+            requests: list[dict[str, Any]] = [
                 _req_freeze_header(int(sheet_id)),
                 _req_body_font_and_left(int(sheet_id), int(num_columns)),
                 _req_bold_header(int(sheet_id), int(num_columns)),
@@ -180,15 +182,17 @@ class SheetsFormatter:
         )
         try:
             meta = execute_with_retry(
-                lambda: self.sheets_service.spreadsheets()
-                .get(spreadsheetId=spreadsheet_id)
-                .execute(),
+                lambda: (
+                    self.sheets_service.spreadsheets()
+                    .get(spreadsheetId=spreadsheet_id)
+                    .execute()
+                ),
                 context=f"fetching spreadsheet metadata for {spreadsheet_id}",
                 retry=RetryConfig(max_attempts=5, max_delay_s=16.0),
             )
             sheets = meta.get("sheets", [])
             log.debug(f"Found {len(sheets)} sheet(s) to format")
-            all_requests: List[Dict[str, Any]] = []
+            all_requests: list[dict[str, Any]] = []
             for s in sheets:
                 props = s.get("properties", {})
                 sheet_id = props.get("sheetId")
@@ -246,12 +250,14 @@ class SheetsFormatter:
     ) -> None:
         """Set number format to TEXT for specified columns in a sheet."""
         meta = execute_with_retry(
-            lambda: self.sheets_service.spreadsheets()
-            .get(
-                spreadsheetId=spreadsheet_id,
-                fields="sheets(properties(sheetId,title))",
-            )
-            .execute(),
+            lambda: (
+                self.sheets_service.spreadsheets()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    fields="sheets(properties(sheetId,title))",
+                )
+                .execute()
+            ),
             context=f"fetching sheet metadata for set_column_text_formatting ({spreadsheet_id})",
             retry=RetryConfig(max_attempts=5, max_delay_s=16.0),
         )
@@ -302,8 +308,8 @@ class SheetsFormatter:
     def reorder_sheets(
         self,
         spreadsheet_id: str,
-        sheet_names_in_order: List[str],
-        spreadsheet_metadata: Dict[str, Any],
+        sheet_names_in_order: list[str],
+        spreadsheet_metadata: dict[str, Any],
     ) -> None:
         """Reorder sheets in a spreadsheet to the specified order."""
         log.info(
@@ -360,7 +366,7 @@ class SheetsFormatter:
             raise
 
 
-def _req_freeze_header(sheet_id: int) -> Dict[str, Any]:
+def _req_freeze_header(sheet_id: int) -> dict[str, Any]:
     return {
         "updateSheetProperties": {
             "properties": {
@@ -377,7 +383,7 @@ def _req_body_font_and_left(
     num_columns: int,
     *,
     font_size: int = DEFAULT_FONT_SIZE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     # IMPORTANT: Do NOT set/replace the entire textFormat object, because that can wipe
     # rich-text hyperlink info (textFormat.link / textFormatRuns). Only set fontSize.
     return {
@@ -399,7 +405,7 @@ def _req_body_font_and_left(
     }
 
 
-def _req_bold_header(sheet_id: int, num_columns: int) -> Dict[str, Any]:
+def _req_bold_header(sheet_id: int, num_columns: int) -> dict[str, Any]:
     return {
         "repeatCell": {
             "range": {
@@ -415,7 +421,7 @@ def _req_bold_header(sheet_id: int, num_columns: int) -> Dict[str, Any]:
     }
 
 
-def _req_auto_resize_cols(sheet_id: int, num_columns: int) -> Dict[str, Any]:
+def _req_auto_resize_cols(sheet_id: int, num_columns: int) -> dict[str, Any]:
     return {
         "autoResizeDimensions": {
             "dimensions": {
@@ -428,7 +434,7 @@ def _req_auto_resize_cols(sheet_id: int, num_columns: int) -> Dict[str, Any]:
     }
 
 
-def _req_set_col_width(sheet_id: int, col_idx: int, px: int) -> Dict[str, Any]:
+def _req_set_col_width(sheet_id: int, col_idx: int, px: int) -> dict[str, Any]:
     return {
         "updateDimensionProperties": {
             "range": {

@@ -4,7 +4,7 @@ import binascii
 import os
 import subprocess
 import time
-from typing import Iterable, List
+from collections.abc import Iterable
 
 # Optional dep (installed by caller environment)
 import acoustid
@@ -52,7 +52,7 @@ class AcoustIdIdentifier:
                     f"[ACOUSTID-RAW] {basename}: match() returned {len(results)} rows"
                 )
 
-                candidates: List[TrackId] = []
+                candidates: list[TrackId] = []
                 for score, recording_id, title, artist in results:
                     try:
                         score_f = float(score)
@@ -140,7 +140,7 @@ class AcoustIdIdentifier:
                                     if isinstance(lookup, dict)
                                     else []
                                 )
-                                candidates2: List[TrackId] = []
+                                candidates2: list[TrackId] = []
 
                                 for r in results2:
                                     score = float(r.get("score", 0.0) or 0.0)

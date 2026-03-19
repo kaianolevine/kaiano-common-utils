@@ -13,10 +13,10 @@ def _ensure_stubbed_config():
         cfg = types.ModuleType("kaiano.config")
         _install("kaiano.config", cfg)
     # minimal config surface used by spotify.py
-    setattr(cfg, "SPOTIPY_CLIENT_ID", "cid")
-    setattr(cfg, "SPOTIPY_CLIENT_SECRET", "secret")
-    setattr(cfg, "SPOTIPY_REFRESH_TOKEN", "refresh")
-    setattr(cfg, "SPOTIPY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
+    cfg.SPOTIPY_CLIENT_ID = "cid"
+    cfg.SPOTIPY_CLIENT_SECRET = "secret"
+    cfg.SPOTIPY_REFRESH_TOKEN = "refresh"
+    cfg.SPOTIPY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
 
 
 def test_spotify_retry_helpers_and_client_from_refresh(monkeypatch):
@@ -52,6 +52,7 @@ def test_spotify_retry_helpers_and_client_from_refresh(monkeypatch):
             self.calls = 0
 
         def refresh_access_token(self, refresh_token):
+            _ = refresh_token
             self.calls += 1
             return {"access_token": f"token-{self.calls}"}
 
@@ -62,6 +63,7 @@ def test_spotify_retry_helpers_and_client_from_refresh(monkeypatch):
             self._search_calls = 0
 
         def search(self, q, type, limit):
+            _ = (q, type, limit)
             self._search_calls += 1
             return {
                 "tracks": {
@@ -73,9 +75,11 @@ def test_spotify_retry_helpers_and_client_from_refresh(monkeypatch):
             return {"id": "me"}
 
         def user_playlist_create(self, user, name, public, description):
+            _ = (user, name, public, description)
             return {"id": "pl"}
 
         def playlist_items(self, playlist_id, offset=0, fields=None, **_kwargs):
+            _ = (playlist_id, fields)
             # pagination fixture: first page has one existing track, then ends
             if offset == 0:
                 return {
@@ -86,12 +90,15 @@ def test_spotify_retry_helpers_and_client_from_refresh(monkeypatch):
             return {"items": [], "total": 0, "next": None}
 
         def playlist_add_items(self, playlist_id, items):
+            _ = (playlist_id, items)
             return {"snapshot_id": "s"}
 
         def current_user_playlists(self, limit=50):
+            _ = limit
             return {"items": [{"name": "MyPlaylist", "id": "pl-1"}]}
 
         def playlist_remove_all_occurrences_of_items(self, playlist_id, items):
+            _ = playlist_id
             self._removed = list(items)
             return {"snapshot_id": "r"}
 

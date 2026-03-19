@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 try:
     import music_tag  # type: ignore
 except Exception as e:  # pragma: no cover
@@ -32,14 +30,14 @@ class MusicTagSnapshotReader:
         "bpm",
     ]
 
-    def read(self, path: str) -> Dict[str, str]:
+    def read(self, path: str) -> dict[str, str]:
         if music_tag is None:  # pragma: no cover
             raise ImportError(
                 "music-tag is required for tag snapshots. Install music-tag to enable this."
             ) from _import_err
 
         f = music_tag.load_file(path)
-        out: Dict[str, str] = {}
+        out: dict[str, str] = {}
         for k in self._KEYS:
             try:
                 if k in f:

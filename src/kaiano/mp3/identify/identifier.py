@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # NOTE: Optional dependencies are imported lazily in from_env().
 
@@ -13,7 +13,7 @@ class TrackId:
     confidence: float = 0.0
 
 
-TrackMetadata = Dict[str, Any]
+TrackMetadata = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -28,10 +28,10 @@ class IdentificationPolicy:
 @dataclass(frozen=True)
 class IdentificationResult:
     path: str
-    candidates: List[TrackId]
-    chosen: Optional[TrackId]
-    metadata: Optional[TrackMetadata]
-    snapshot: Dict[str, str] = field(default_factory=dict)
+    candidates: list[TrackId]
+    chosen: TrackId | None
+    metadata: TrackMetadata | None
+    snapshot: dict[str, str] = field(default_factory=dict)
 
 
 class Mp3Identifier:
@@ -63,13 +63,13 @@ class Mp3Identifier:
         cls,
         *,
         acoustid_api_key: str,
-        policy: Optional[IdentificationPolicy] = None,
+        policy: IdentificationPolicy | None = None,
         app_name: str = "identify-audio",
         app_version: str = "0.1.0",
         contact: str = "",
         throttle_s: float = 1.0,
         enable_tag_snapshot: bool = True,
-    ) -> "Mp3Identifier":
+    ) -> Mp3Identifier:
         """Create an identifier with optional deps loaded lazily."""
 
         policy = policy or IdentificationPolicy()
@@ -106,7 +106,7 @@ class Mp3Identifier:
     def identify(
         self, path: str, *, fetch_metadata: bool = True
     ) -> IdentificationResult:
-        snapshot: Dict[str, str] = {}
+        snapshot: dict[str, str] = {}
         if self._snapshot_reader is not None:
             try:
                 snapshot = self._snapshot_reader.read(path)
@@ -115,11 +115,11 @@ class Mp3Identifier:
 
         candidates = list(self._acoustid.identify(path))
 
-        chosen: Optional[TrackId] = None
+        chosen: TrackId | None = None
         if candidates:
             chosen = max(candidates, key=lambda c: float(c.confidence or 0.0))
 
-        metadata: Optional[TrackMetadata] = None
+        metadata: TrackMetadata | None = None
         if fetch_metadata and chosen is not None:
             conf = float(chosen.confidence or 0.0)
             if conf >= float(self._policy.fetch_metadata_min_confidence):

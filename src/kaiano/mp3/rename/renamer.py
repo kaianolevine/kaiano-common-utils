@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from .io.rename_fs import RenameFacade
 
@@ -15,16 +16,16 @@ class Mp3Renamer:
     - accepts a mapping (dict-like) with optional keys: title, artist
     """
 
-    def __init__(self, facade: Optional[RenameFacade] = None):
+    def __init__(self, facade: RenameFacade | None = None):
         self._rename = facade or RenameFacade()
 
     def rename(
         self,
         path: str,
         *,
-        metadata: Optional[Mapping[str, Any]] = None,
-        title: Optional[str] = None,
-        artist: Optional[str] = None,
+        metadata: Mapping[str, Any] | None = None,
+        title: str | None = None,
+        artist: str | None = None,
         template: str = "{title}_{artist}",
         fallback_to_original: bool = True,
     ) -> str:

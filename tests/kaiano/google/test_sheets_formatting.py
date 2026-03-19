@@ -19,6 +19,8 @@ def test_formatter_batch_update_retries(monkeypatch, as_http_error):
 
             class _Sheets:
                 def batchUpdate(self, spreadsheetId, body):
+                    _ = (spreadsheetId, body)
+
                     def run():
                         svc.n += 1
                         if svc.n < 3:

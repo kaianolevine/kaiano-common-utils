@@ -42,7 +42,7 @@ class GoogleAPI:
         *,
         auth: AuthConfig | None = None,
         retry: RetryConfig | None = None,
-    ) -> "GoogleAPI":
+    ) -> GoogleAPI:
         """Create clients using GOOGLE_CREDENTIALS_JSON (preferred) or credentials.json."""
 
         auth = auth or AuthConfig()
@@ -67,7 +67,7 @@ class GoogleAPI:
         *,
         scopes: tuple[str, ...] | None = None,
         retry: RetryConfig | None = None,
-    ) -> "GoogleAPI":
+    ) -> GoogleAPI:
         auth = AuthConfig(
             credentials_file=credentials_file, scopes=scopes or AuthConfig().scopes
         )

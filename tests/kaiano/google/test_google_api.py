@@ -26,7 +26,9 @@ def test_google_api_from_service_account_file_passes_file(monkeypatch):
         return "ok"
 
     monkeypatch.setattr(
-        GoogleAPI, "from_env", classmethod(lambda cls, **kw: fake_from_env(**kw))
+        GoogleAPI,
+        "from_env",
+        classmethod(lambda _cls, **kw: fake_from_env(**kw)),
     )
 
     out = GoogleAPI.from_service_account_file("creds.json", scopes=("s1",))

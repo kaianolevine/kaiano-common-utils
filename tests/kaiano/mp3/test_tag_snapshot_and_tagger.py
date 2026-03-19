@@ -83,10 +83,12 @@ def test_music_tag_io_read_write_and_dump(tmp_path, monkeypatch):
 
     class TYER:
         def __init__(self, encoding, text):
+            _ = encoding
             self.text = text
 
     class TDRC:
         def __init__(self, encoding, text):
+            _ = encoding
             self.text = text
 
     class ID3:

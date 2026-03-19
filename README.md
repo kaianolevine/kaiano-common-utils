@@ -167,6 +167,23 @@ import kaiano as kcu
 # from kaiano.something import useful_function
 ```
 
+## Internal API Client
+
+KaianoApiClient is used by processors to call Kaiano's internal
+FastAPI services (e.g. deejay-marvel-api).
+
+Configuration via environment variables:
+  KAIANO_API_BASE_URL — base URL of the target service
+  KAIANO_API_OWNER_ID — owner ID (falls back to OWNER_ID)
+
+Usage:
+```python
+from kaiano.api import KaianoApiClient
+
+client = KaianoApiClient.from_env()
+result = client.post("/v1/ingest", payload)
+```
+
 ## Development
 
 ```bash

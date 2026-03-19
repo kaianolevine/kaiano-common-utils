@@ -3,8 +3,9 @@ from __future__ import annotations
 import random
 import socket
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, TypeVar
+from typing import TypeVar
 
 import httplib2
 from googleapiclient.errors import HttpError
@@ -30,7 +31,7 @@ class RetryConfig:
     max_delay_s: float = 60.0
 
     # Optional alias for ergonomics / backwards compatibility
-    max_attempts: Optional[int] = None
+    max_attempts: int | None = None
 
     def __post_init__(self) -> None:
         # Backward/ergonomic alias: allow callers to pass max_attempts.
@@ -53,7 +54,7 @@ class RetryConfig:
             object.__setattr__(self, "max_delay_s", float(self.base_delay_s))
 
 
-def _http_status(error: HttpError) -> Optional[int]:
+def _http_status(error: HttpError) -> int | None:
     return getattr(getattr(error, "resp", None), "status", None)
 
 
@@ -80,7 +81,7 @@ def is_retryable_http_error(error: HttpError) -> bool:
         return True
 
     # Some quota / rate-limit errors come back as 403 with message hints
-    if status == 403 and any(
+    return status == 403 and any(
         s in msg
         for s in [
             "quota",
@@ -89,10 +90,7 @@ def is_retryable_http_error(error: HttpError) -> bool:
             "user-rate",
             "backenderror",
         ]
-    ):
-        return True
-
-    return False
+    )
 
 
 def is_retryable_non_http_error(error: Exception) -> bool:

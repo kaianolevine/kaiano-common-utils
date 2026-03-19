@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 try:
     import kaiano.helpers as helpers  # type: ignore
@@ -12,7 +13,7 @@ except Exception:  # pragma: no cover
     helpers = None
 
 
-def _safe_filename_component_fallback(value: Optional[str]) -> str:
+def _safe_filename_component_fallback(value: str | None) -> str:
     if value is None:
         return ""
     # Keep it simple: strip, replace spaces, and drop path separators.
@@ -74,7 +75,7 @@ def safe_filename_component(v: Any) -> str:
     return s.strip("_")
 
 
-def _safe_component(value: Optional[str]) -> str:
+def _safe_component(value: str | None) -> str:
     if helpers is not None and hasattr(helpers, "safe_filename_component"):
         return helpers.safe_filename_component(value)  # type: ignore[attr-defined]
     return _safe_filename_component_fallback(value)
@@ -100,8 +101,8 @@ class RenameFacade:
         path: str,
         *,
         metadata: Mapping[str, Any] | None = None,
-        title: Optional[str] = None,
-        artist: Optional[str] = None,
+        title: str | None = None,
+        artist: str | None = None,
         template: str = "{title}_{artist}",
         fallback_to_original: bool = True,
     ) -> str:
@@ -119,8 +120,12 @@ class RenameFacade:
 
         if metadata is not None:
             # Mapping-like; prefer explicit args and fall back to metadata.
-            title = title or (metadata.get("title") if hasattr(metadata, "get") else None)  # type: ignore[arg-type]
-            artist = artist or (metadata.get("artist") if hasattr(metadata, "get") else None)  # type: ignore[arg-type]
+            title = title or (
+                metadata.get("title") if hasattr(metadata, "get") else None
+            )  # type: ignore[arg-type]
+            artist = artist or (
+                metadata.get("artist") if hasattr(metadata, "get") else None
+            )  # type: ignore[arg-type]
 
         original_name = os.path.basename(path)
         _, ext = os.path.splitext(original_name)
@@ -138,8 +143,8 @@ class RenameFacade:
         path: str,
         metadata: Mapping[str, Any] | None = None,
         *,
-        title: Optional[str] = None,
-        artist: Optional[str] = None,
+        title: str | None = None,
+        artist: str | None = None,
         template: str = "{title}_{artist}",
         fallback_to_original: bool = True,
     ) -> str:

@@ -79,6 +79,7 @@ class FakeSheetsService:
                         return _Exec(lambda: {"appended": True})
 
                     def clear(self, spreadsheetId, range, body):
+                        _ = body
                         service.calls.append(("values.clear", spreadsheetId, range))
                         service.values_store[range] = []
                         return _Exec(lambda: {"cleared": True})

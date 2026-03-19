@@ -72,7 +72,7 @@ class FakeDriveService:
                 # folder create: return stable id
                 name = (body or {}).get("name", "")
                 new_id = svc._created_folders.setdefault(
-                    name, f"id_{len(svc._created_folders)+1}"
+                    name, f"id_{len(svc._created_folders) + 1}"
                 )
                 return _Exec(lambda: {"id": new_id})
 

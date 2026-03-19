@@ -6,7 +6,7 @@ def test_parse_facade_helpers(monkeypatch):
     # Ensure TIMEZONE exists on the stubbed config module installed by google tests.
     cfg = sys.modules.get("kaiano.config")
     if cfg is not None and not hasattr(cfg, "TIMEZONE"):
-        setattr(cfg, "TIMEZONE", "America/Chicago")
+        cfg.TIMEZONE = "America/Chicago"
 
     m3u = importlib.reload(importlib.import_module("kaiano.vdj.m3u.m3u"))
     ParseFacade = m3u.ParseFacade
@@ -19,7 +19,7 @@ def test_parse_facade_helpers(monkeypatch):
 def test_parse_m3u_lines_rollover_and_lastplay_formats(monkeypatch):
     cfg = sys.modules.get("kaiano.config")
     if cfg is not None:
-        setattr(cfg, "TIMEZONE", "America/Chicago")
+        cfg.TIMEZONE = "America/Chicago"
 
     m3u = importlib.reload(importlib.import_module("kaiano.vdj.m3u.m3u"))
     ParseFacade = m3u.ParseFacade
@@ -47,7 +47,7 @@ def test_parse_m3u_lines_rollover_and_lastplay_formats(monkeypatch):
 def test_parse_m3u_backcompat(tmp_path, monkeypatch):
     cfg = sys.modules.get("kaiano.config")
     if cfg is not None:
-        setattr(cfg, "TIMEZONE", "America/Chicago")
+        cfg.TIMEZONE = "America/Chicago"
 
     m3u = importlib.reload(importlib.import_module("kaiano.vdj.m3u.m3u"))
     content = "\n".join(

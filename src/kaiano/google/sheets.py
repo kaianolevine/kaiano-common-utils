@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from googleapiclient.errors import HttpError
 
@@ -36,8 +37,8 @@ class SheetsFacade:
 
     def get_metadata(
         self, spreadsheet_id: str, *, fields: str | None = None, max_retries: int = 6
-    ) -> Dict[str, Any]:
-        def _do_get() -> Dict[str, Any]:
+    ) -> dict[str, Any]:
+        def _do_get() -> dict[str, Any]:
             if fields:
                 return (
                     self._service.spreadsheets()
@@ -55,22 +56,26 @@ class SheetsFacade:
             retry=retry,
         )
 
-    def batch_update(self, spreadsheet_id: str, requests: list[dict]) -> Dict[str, Any]:
+    def batch_update(self, spreadsheet_id: str, requests: list[dict]) -> dict[str, Any]:
         body = {"requests": requests}
         return execute_with_retry(
-            lambda: self._service.spreadsheets()
-            .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
-            .execute(),
+            lambda: (
+                self._service.spreadsheets()
+                .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
+                .execute()
+            ),
             context=f"batchUpdate ({spreadsheet_id})",
             retry=self._retry,
         )
 
     def read_values(self, spreadsheet_id: str, a1_range: str) -> list[list[str]]:
         result = execute_with_retry(
-            lambda: self._service.spreadsheets()
-            .values()
-            .get(spreadsheetId=spreadsheet_id, range=a1_range)
-            .execute(),
+            lambda: (
+                self._service.spreadsheets()
+                .values()
+                .get(spreadsheetId=spreadsheet_id, range=a1_range)
+                .execute()
+            ),
             context=f"reading range '{a1_range}' ({spreadsheet_id})",
             retry=self._retry,
         )
@@ -84,18 +89,20 @@ class SheetsFacade:
         values: list[list[Any]],
         *,
         value_input_option: str = "RAW",
-    ) -> Dict:
+    ) -> dict:
         body = {"values": values}
         return execute_with_retry(
-            lambda: self._service.spreadsheets()
-            .values()
-            .update(
-                spreadsheetId=spreadsheet_id,
-                range=a1_range,
-                valueInputOption=value_input_option,
-                body=body,
-            )
-            .execute(),
+            lambda: (
+                self._service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=a1_range,
+                    valueInputOption=value_input_option,
+                    body=body,
+                )
+                .execute()
+            ),
             context=f"writing range '{a1_range}' ({spreadsheet_id})",
             retry=self._retry,
         )
@@ -107,39 +114,43 @@ class SheetsFacade:
         values: list[list[Any]],
         *,
         value_input_option: str = "RAW",
-    ) -> Dict:
+    ) -> dict:
         body = {"values": values}
         return execute_with_retry(
-            lambda: self._service.spreadsheets()
-            .values()
-            .append(
-                spreadsheetId=spreadsheet_id,
-                range=a1_range,
-                valueInputOption=value_input_option,
-                insertDataOption="INSERT_ROWS",
-                body=body,
-            )
-            .execute(),
+            lambda: (
+                self._service.spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=spreadsheet_id,
+                    range=a1_range,
+                    valueInputOption=value_input_option,
+                    insertDataOption="INSERT_ROWS",
+                    body=body,
+                )
+                .execute()
+            ),
             context=f"appending to range '{a1_range}' ({spreadsheet_id})",
             retry=self._retry,
         )
 
-    def clear(self, spreadsheet_id: str, a1_range: str) -> Dict:
+    def clear(self, spreadsheet_id: str, a1_range: str) -> dict:
         return execute_with_retry(
-            lambda: self._service.spreadsheets()
-            .values()
-            .clear(
-                spreadsheetId=spreadsheet_id,
-                range=a1_range,
-                body={},
-            )
-            .execute(),
+            lambda: (
+                self._service.spreadsheets()
+                .values()
+                .clear(
+                    spreadsheetId=spreadsheet_id,
+                    range=a1_range,
+                    body={},
+                )
+                .execute()
+            ),
             context=f"clearing range '{a1_range}' ({spreadsheet_id})",
             retry=self._retry,
         )
 
     def ensure_sheet_exists(
-        self, spreadsheet_id: str, sheet_name: str, headers: Optional[list[str]] = None
+        self, spreadsheet_id: str, sheet_name: str, headers: list[str] | None = None
     ) -> None:
         meta = self.get_metadata(spreadsheet_id)
         titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
@@ -264,7 +275,7 @@ class SheetsFacade:
         ascending: bool = True,
         start_row: int = 2,
         end_row: int | None = None,
-    ) -> Dict:
+    ) -> dict:
         sheet_id = self.get_sheet_id(spreadsheet_id, sheet_name)
 
         sort_range: dict = {"sheetId": sheet_id, "startRowIndex": start_row - 1}

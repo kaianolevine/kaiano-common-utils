@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 import pytz
 
@@ -59,13 +59,13 @@ class ParseFacade:
         year, month, day = map(int, file_date_str.split("-"))
         base_date = tz.localize(datetime.datetime(year, month, day, 0, 0))
 
-        prev_assigned_dt: Optional[datetime.datetime] = None
+        prev_assigned_dt: datetime.datetime | None = None
         day_offset = 0
         entries: list[M3UEntry] = []
 
         def _parse_last_play_datetime(
             last_play_str: str,
-        ) -> Optional[datetime.datetime]:
+        ) -> datetime.datetime | None:
             if not last_play_str:
                 return None
             s = str(last_play_str).strip()
@@ -148,14 +148,14 @@ class ParseFacade:
         return entries
 
     @staticmethod
-    def parse_m3u(_sheets_service, filepath: str, spreadsheet_id: str):
+    def parse_m3u(_sheets_service, filepath: str, _spreadsheet_id: str):
         """Back-compat: parse a local .m3u file and return (artist, title, extvdj_line).
 
-        `spreadsheet_id` is unused (kept only for signature compatibility).
+        `_spreadsheet_id` is unused (kept only for signature compatibility).
         """
         songs = []
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 for raw in f:
                     line = raw.strip()
                     if line.startswith("#EXTVDJ:"):

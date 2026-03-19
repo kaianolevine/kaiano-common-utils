@@ -76,7 +76,9 @@ def test_drive_facade_exercises_remaining_helpers(monkeypatch, tmp_path):
 
     # find_or_create_spreadsheet -> create path
     monkeypatch.setattr(
-        drive, "create_spreadsheet_in_folder", lambda name, folder_id: "new_sheet"
+        drive,
+        "create_spreadsheet_in_folder",
+        lambda _name, _folder_id: "new_sheet",
     )
     assert (
         drive.find_or_create_spreadsheet(parent_folder_id="p", name="X") == "new_sheet"
@@ -84,7 +86,9 @@ def test_drive_facade_exercises_remaining_helpers(monkeypatch, tmp_path):
 
     # get_all_subfolders / get_files_in_folder just call list_files
     monkeypatch.setattr(
-        drive, "list_files", lambda *a, **k: [DriveFile(id="f", name="n")]
+        drive,
+        "list_files",
+        lambda *_a, **_k: [DriveFile(id="f", name="n")],
     )
     assert drive.get_all_subfolders("p")[0].id == "f"
     assert drive.get_files_in_folder("p")[0].name == "n"

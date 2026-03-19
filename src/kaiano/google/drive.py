@@ -4,7 +4,7 @@ import random
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBaseUpload
@@ -68,16 +68,18 @@ class DriveFacade:
             q += f" and mimeType = '{safe_mime}'"
 
         resp = execute_with_retry(
-            lambda: self._service.files()
-            .list(
-                q=q,
-                spaces="drive",
-                fields="files(id, name)",
-                pageSize=10,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .list(
+                    q=q,
+                    spaces="drive",
+                    fields="files(id, name)",
+                    pageSize=10,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"finding file '{name}' under {parent_folder_id}",
             retry=self._retry,
         )
@@ -88,8 +90,8 @@ class DriveFacade:
         self,
         parent_id: str,
         *,
-        mime_type: Optional[str] = None,
-        name_contains: Optional[str] = None,
+        mime_type: str | None = None,
+        name_contains: str | None = None,
         trashed: bool = False,
         include_folders: bool = True,
     ) -> list[DriveFile]:
@@ -119,7 +121,7 @@ class DriveFacade:
         page_token: str | None = None
         while True:
             result = execute_with_retry(
-                lambda: _call(page_token),
+                lambda page_token=page_token: _call(page_token),
                 context=f"listing files in folder {parent_id}",
                 retry=self._retry,
             )
@@ -149,15 +151,17 @@ class DriveFacade:
         )
 
         resp = execute_with_retry(
-            lambda: self._service.files()
-            .list(
-                q=query,
-                spaces="drive",
-                fields="files(id, name)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .list(
+                    q=query,
+                    spaces="drive",
+                    fields="files(id, name)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"finding folder '{name}' under {parent_id}",
             retry=self._retry,
         )
@@ -171,13 +175,15 @@ class DriveFacade:
                 "parents": [parent_id],
             }
             created = execute_with_retry(
-                lambda: self._service.files()
-                .create(
-                    body=folder_metadata,
-                    fields="id",
-                    supportsAllDrives=True,
-                )
-                .execute(),
+                lambda: (
+                    self._service.files()
+                    .create(
+                        body=folder_metadata,
+                        fields="id",
+                        supportsAllDrives=True,
+                    )
+                    .execute()
+                ),
                 context=f"creating folder '{name}' under {parent_id}",
                 retry=self._retry,
             )
@@ -190,8 +196,8 @@ class DriveFacade:
         self,
         file_id: str,
         *,
-        parent_folder_id: Optional[str] = None,
-        name: Optional[str] = None,
+        parent_folder_id: str | None = None,
+        name: str | None = None,
         max_retries: int = 5,
     ) -> str:
         """Copy a Drive file.
@@ -213,17 +219,19 @@ class DriveFacade:
         for attempt in range(max_retries):
             try:
                 log.info(
-                    f"📄 Copying file {file_id} → '{name if name else '(same name)'}' (attempt {attempt+1}/{max_retries})"
+                    f"📄 Copying file {file_id} → '{name if name else '(same name)'}' (attempt {attempt + 1}/{max_retries})"
                 )
                 copied = execute_with_retry(
-                    lambda: self._service.files()
-                    .copy(
-                        fileId=file_id,
-                        body=body,
-                        fields="id",
-                        supportsAllDrives=True,
-                    )
-                    .execute(),
+                    lambda: (
+                        self._service.files()
+                        .copy(
+                            fileId=file_id,
+                            body=body,
+                            fields="id",
+                            supportsAllDrives=True,
+                        )
+                        .execute()
+                    ),
                     context=f"copying file {file_id}",
                     retry=self._retry,
                 )
@@ -240,7 +248,7 @@ class DriveFacade:
                 if status == 404 and "not found" in str(e).lower():
                     wait = delay + random.uniform(0, 0.5)
                     log.warning(
-                        f"⚠️ File {file_id} not yet visible, retrying in {wait:.1f}s (attempt {attempt+1}/{max_retries})"
+                        f"⚠️ File {file_id} not yet visible, retrying in {wait:.1f}s (attempt {attempt + 1}/{max_retries})"
                     )
                     time.sleep(wait)
                     delay *= 2
@@ -255,13 +263,15 @@ class DriveFacade:
         self, file_id: str, *, new_parent_id: str, remove_from_parents: bool = True
     ) -> None:
         file_meta = execute_with_retry(
-            lambda: self._service.files()
-            .get(
-                fileId=file_id,
-                fields="parents",
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .get(
+                    fileId=file_id,
+                    fields="parents",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"getting parents for file {file_id}",
             retry=self._retry,
         )
@@ -302,9 +312,11 @@ class DriveFacade:
         """
 
         data = execute_with_retry(
-            lambda: self._service.files()
-            .export(fileId=file_id, mimeType=mime_type)
-            .execute(),
+            lambda: (
+                self._service.files()
+                .export(fileId=file_id, mimeType=mime_type)
+                .execute()
+            ),
             context=f"exporting file {file_id} as {mime_type}",
             retry=self._retry,
         )
@@ -324,21 +336,23 @@ class DriveFacade:
         filepath: str,
         *,
         parent_id: str,
-        dest_name: Optional[str] = None,
-        mime_type: Optional[str] = None,
+        dest_name: str | None = None,
+        mime_type: str | None = None,
     ) -> str:
         upload_name = dest_name or os.path.basename(filepath)
         file_metadata = {"name": upload_name, "parents": [parent_id]}
         media = MediaFileUpload(filepath, mimetype=mime_type, resumable=True)
         created = execute_with_retry(
-            lambda: self._service.files()
-            .create(
-                body=file_metadata,
-                media_body=media,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"uploading file {upload_name} to folder {parent_id}",
             retry=self._retry,
         )
@@ -349,20 +363,22 @@ class DriveFacade:
         file_id: str,
         filepath: str,
         *,
-        mime_type: Optional[str] = None,
+        mime_type: str | None = None,
     ) -> None:
         """Upload a new version of an existing Drive file (in-place update)."""
 
         media = MediaFileUpload(filepath, mimetype=mime_type, resumable=True)
 
         execute_with_retry(
-            lambda: self._service.files()
-            .update(
-                fileId=file_id,
-                media_body=media,
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .update(
+                    fileId=file_id,
+                    media_body=media,
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"updating file {file_id} from {os.path.basename(filepath)}",
             retry=self._retry,
         )
@@ -371,13 +387,15 @@ class DriveFacade:
         """Rename a Drive file."""
 
         execute_with_retry(
-            lambda: self._service.files()
-            .update(
-                fileId=file_id,
-                body={"name": new_name},
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .update(
+                    fileId=file_id,
+                    body={"name": new_name},
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"renaming file {file_id} to {new_name}",
             retry=self._retry,
         )
@@ -387,7 +405,7 @@ class DriveFacade:
         filepath: str,
         *,
         parent_id: str,
-        dest_name: Optional[str] = None,
+        dest_name: str | None = None,
     ) -> str:
         """Upload a CSV and convert it to a Google Sheet in the destination folder."""
 
@@ -402,14 +420,16 @@ class DriveFacade:
         media = MediaFileUpload(filepath, mimetype="text/csv", resumable=True)
 
         created = execute_with_retry(
-            lambda: self._service.files()
-            .create(
-                body=file_metadata,
-                media_body=media,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"uploading CSV as Google Sheet {upload_name} to folder {parent_id}",
             retry=self._retry,
         )
@@ -457,9 +477,11 @@ class DriveFacade:
         """
 
         execute_with_retry(
-            lambda: self._service.files()
-            .delete(fileId=file_id, supportsAllDrives=True)
-            .execute(),
+            lambda: (
+                self._service.files()
+                .delete(fileId=file_id, supportsAllDrives=True)
+                .execute()
+            ),
             context=f"deleting file {file_id}",
             retry=self._retry,
         )
@@ -557,13 +579,15 @@ class DriveFacade:
         }
 
         created = execute_with_retry(
-            lambda: self._service.files()
-            .create(
-                body=body,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .create(
+                    body=body,
+                    fields="id",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"creating spreadsheet '{name}' in folder {folder_id}",
             retry=self._retry,
         )
@@ -607,16 +631,18 @@ class DriveFacade:
         )
 
         resp = execute_with_retry(
-            lambda: self._service.files()
-            .list(
-                q=q,
-                spaces="drive",
-                fields="files(name)",
-                pageSize=1000,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .list(
+                    q=q,
+                    spaces="drive",
+                    fields="files(name)",
+                    pageSize=1000,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"resolving versioned filename in folder {parent_folder_id}",
             retry=self._retry,
         )
@@ -647,13 +673,15 @@ class DriveFacade:
         """Download a Drive file into memory and return (metadata + bytes)."""
 
         meta = execute_with_retry(
-            lambda: self._service.files()
-            .get(
-                fileId=file_id,
-                fields="id,name,mimeType",
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .get(
+                    fileId=file_id,
+                    fields="id,name,mimeType",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"getting metadata for file {file_id}",
             retry=self._retry,
         )
@@ -693,14 +721,16 @@ class DriveFacade:
             io.BytesIO(content), mimetype=mime_type, resumable=False
         )
         created = execute_with_retry(
-            lambda: self._service.files()
-            .create(
-                body={"name": filename, "parents": [parent_id]},
-                media_body=media,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute(),
+            lambda: (
+                self._service.files()
+                .create(
+                    body={"name": filename, "parents": [parent_id]},
+                    media_body=media,
+                    fields="id",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             context=f"uploading bytes file {filename} to folder {parent_id}",
             retry=self._retry,
         )
@@ -726,13 +756,15 @@ class DriveFacade:
         # Detect delete/trash permissions up front.
         try:
             caps_meta = execute_with_retry(
-                lambda: self._service.files()
-                .get(
-                    fileId=file_id,
-                    fields="capabilities(canDelete,canTrash)",
-                    supportsAllDrives=True,
-                )
-                .execute(),
+                lambda: (
+                    self._service.files()
+                    .get(
+                        fileId=file_id,
+                        fields="capabilities(canDelete,canTrash)",
+                        supportsAllDrives=True,
+                    )
+                    .execute()
+                ),
                 context=f"reading capabilities for file {file_id}",
                 retry=self._retry,
             )
@@ -761,9 +793,11 @@ class DriveFacade:
         if not skip_delete_trash and can_delete:
             try:
                 execute_with_retry(
-                    lambda: self._service.files()
-                    .delete(fileId=file_id, supportsAllDrives=True)
-                    .execute(),
+                    lambda: (
+                        self._service.files()
+                        .delete(fileId=file_id, supportsAllDrives=True)
+                        .execute()
+                    ),
                     context=f"deleting file {file_id}",
                     retry=self._retry,
                 )
@@ -775,13 +809,15 @@ class DriveFacade:
         if not skip_delete_trash and can_trash:
             try:
                 execute_with_retry(
-                    lambda: self._service.files()
-                    .update(
-                        fileId=file_id,
-                        body={"trashed": True},
-                        supportsAllDrives=True,
-                    )
-                    .execute(),
+                    lambda: (
+                        self._service.files()
+                        .update(
+                            fileId=file_id,
+                            body={"trashed": True},
+                            supportsAllDrives=True,
+                        )
+                        .execute()
+                    ),
                     context=f"trashing file {file_id}",
                     retry=self._retry,
                 )
@@ -798,9 +834,13 @@ class DriveFacade:
 
             try:
                 meta = execute_with_retry(
-                    lambda: self._service.files()
-                    .get(fileId=file_id, fields="id,parents", supportsAllDrives=True)
-                    .execute(),
+                    lambda: (
+                        self._service.files()
+                        .get(
+                            fileId=file_id, fields="id,parents", supportsAllDrives=True
+                        )
+                        .execute()
+                    ),
                     context=f"getting parents for file {file_id}",
                     retry=self._retry,
                 )
@@ -823,15 +863,17 @@ class DriveFacade:
 
             try:
                 execute_with_retry(
-                    lambda: self._service.files()
-                    .update(
-                        fileId=file_id,
-                        addParents=quarantine_folder_id,
-                        removeParents=remove_str,
-                        fields="id,parents",
-                        supportsAllDrives=True,
-                    )
-                    .execute(),
+                    lambda: (
+                        self._service.files()
+                        .update(
+                            fileId=file_id,
+                            addParents=quarantine_folder_id,
+                            removeParents=remove_str,
+                            fields="id,parents",
+                            supportsAllDrives=True,
+                        )
+                        .execute()
+                    ),
                     context=f"moving file {file_id} to quarantine folder",
                     retry=self._retry,
                 )

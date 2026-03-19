@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import os
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 try:
     import music_tag  # type: ignore
@@ -51,7 +53,7 @@ class MusicTagIO:
     This module is *only* about reading/writing tags on local files.
     """
 
-    def _normalize_year_for_tag(self, v: Optional[str]) -> str:
+    def _normalize_year_for_tag(self, v: str | None) -> str:
         s = "" if v is None else str(v).strip()
         if not s:
             return ""
@@ -59,7 +61,7 @@ class MusicTagIO:
             return s[:4]
         return ""
 
-    def _save_virtualdj_id3_compat(self, path: str, year: Optional[str]) -> None:
+    def _save_virtualdj_id3_compat(self, path: str, year: str | None) -> None:
         """Best-effort: ensure VirtualDJ-friendly ID3v2.3 save (mp3 only)."""
         try:
             if ID3 is None:  # pragma: no cover
@@ -75,14 +77,10 @@ class MusicTagIO:
 
             normalized_year = self._normalize_year_for_tag(year)
             if normalized_year:
-                try:
+                with contextlib.suppress(Exception):
                     id3.setall("TYER", [TYER(encoding=3, text=normalized_year)])
-                except Exception:
-                    pass
-                try:
+                with contextlib.suppress(Exception):
                     id3.setall("TDRC", [TDRC(encoding=3, text=normalized_year)])
-                except Exception:
-                    pass
 
             id3.save(path, v2_version=3)
         except Exception:
@@ -110,7 +108,7 @@ class MusicTagIO:
             "bpm",
         ]
 
-        tags: Dict[str, str] = {}
+        tags: dict[str, str] = {}
         for k in keys:
             try:
                 if k in f:
@@ -153,7 +151,7 @@ class MusicTagIO:
 
         f = music_tag.load_file(path)
 
-        def _get(*keys: str) -> Optional[Any]:
+        def _get(*keys: str) -> Any | None:
             for k in keys:
                 if k in metadata:
                     return metadata.get(k)
@@ -187,7 +185,7 @@ class MusicTagIO:
                 path, str(mapping.get("year") or "") or None
             )
 
-    def dump_tags(self, path: str) -> Dict[str, str]:
+    def dump_tags(self, path: str) -> dict[str, str]:
         """Return a stable dict of tags for logging/debug."""
         if music_tag is None:  # pragma: no cover
             return {}
@@ -199,7 +197,7 @@ class MusicTagIO:
             )
             return {}
 
-        printed: Dict[str, str] = {}
+        printed: dict[str, str] = {}
 
         for k in TAG_FIELDS:
             try:
@@ -214,9 +212,7 @@ class MusicTagIO:
         # Include extra keys if available
         extra_keys = []
         try:
-            extra_keys = [
-                k for k in getattr(f, "keys")() if k not in printed and k != "artwork"
-            ]
+            extra_keys = [k for k in f if k not in printed and k != "artwork"]
         except Exception:
             extra_keys = []
 
