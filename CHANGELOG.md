@@ -1,3 +1,15 @@
+# [1.0.0](https://github.com/kaianolevine/kaiano-common-utils/compare/v0.3.23...v1.0.0) (2026-03-23)
+
+
+### Features
+
+* migrate to semantic-release automated versioning ([50b8d7d](https://github.com/kaianolevine/kaiano-common-utils/commit/50b8d7d106e0015ff4991806432d54908d1305a1))
+
+
+### BREAKING CHANGES
+
+* versioning now managed by semantic-release, manual bumps removed
+
 ## [0.3.23](https://github.com/kaianolevine/kaiano-common-utils/compare/v0.3.22...v0.3.23) (2026-03-23)
 
 
