@@ -1,6 +1,6 @@
 # kaiano-common-utils
 
-[![Build](https://github.com/kaianolevine/kaiano-common-utils/actions/workflows/test.yml/badge.svg)](https://github.com/kaianolevine/kaiano-common-utils/actions/workflows/test.yml)
+[![Build](https://github.com/kaianolevine/kaiano-common-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/kaianolevine/kaiano-common-utils/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-auto--updated-brightgreen.svg)](https://github.com/kaianolevine/kaiano-common-utils)
 [![Version](https://img.shields.io/github/v/tag/kaianolevine/kaiano-common-utils?label=version)](https://github.com/kaianolevine/kaiano-common-utils/releases)
 
@@ -103,11 +103,10 @@ poetry run flake8
 
 ### 8️⃣ GitHub Actions CI
 
-Every push or pull request triggers:
-- ✅ **Test and Coverage** workflow
-- 🔖 **Auto Version Bump** (on main branch)
+Pushes and pull requests to `main` run the **CI** workflow (lint + tests).  
+Merges to `main` also run **semantic-release** to version, tag, and update the changelog.
 
-Ensure **GitHub Actions → Settings → Workflow permissions** is set to “Read and write”.
+Ensure **GitHub Actions → Settings → Workflow permissions** is set to “Read and write” (needed for releases).
 
 ---
 
@@ -194,9 +193,18 @@ poetry run pytest --cov=kaiano
 
 ## Versioning
 
-- Starts at `0.0.0`
-- Auto-bumps PATCH on push to `main` (tags `vX.Y.Z`)
-- Managed by Poetry + GitHub Actions
+This repo uses semantic-release for automated versioning.
+Versions are determined automatically from commit messages
+on merge to main:
+
+- feat: → minor version bump
+- fix: → patch version bump
+- feat!: or BREAKING CHANGE → major bump
+- chore/docs/refactor/test/ci → no version bump
+
+Never manually edit the version in pyproject.toml.
+Never manually edit CHANGELOG.md.
+Both are managed automatically on merge to main.
 
 ## License
 
