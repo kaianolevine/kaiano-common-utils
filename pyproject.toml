@@ -1,6 +1,6 @@
 [project]
 name = "kaiano"
-version = "0.4.0"
+version = "0.3.23"
 description = "Common utility functions shared across Kaiano’s projects."
 authors = [{ name = "Kaiano Levine", email = "kaiano@example.com" }]
 license = { text = "MIT" }
