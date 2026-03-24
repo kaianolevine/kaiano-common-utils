@@ -351,7 +351,7 @@ class SpotifyAPI:
                 )
             log.info(f"Cleared {len(uris)} tracks from playlist {playlist_id}")
         except Exception as e:
-            log.error(f"❌ Failed to clear playlist {playlist_id}: {e}", exc_info=True)
+            log.error(f"❌ Failed to clear playlist {playlist_id}: {e}")
 
     def find_playlist_by_name(self, name: str):
         try:
