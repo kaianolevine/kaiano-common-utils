@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/kaianolevine/kaiano-common-utils/compare/v1.0.0...v1.1.0) (2026-03-24)
+
+
+### Bug Fixes
+
+* tests ([7496254](https://github.com/kaianolevine/kaiano-common-utils/commit/7496254af4a0011304fac190abbb1962695d4ee5))
+
+
+### Features
+
+* adding clear playlist functionality ([386fe58](https://github.com/kaianolevine/kaiano-common-utils/commit/386fe583c18b3974063e81f4aadb9f9f4f98f33b))
+
 # [1.0.0](https://github.com/kaianolevine/kaiano-common-utils/compare/v0.3.23...v1.0.0) (2026-03-23)
 
 
