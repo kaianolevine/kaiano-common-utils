@@ -326,6 +326,33 @@ class SpotifyAPI:
             )
             return []
 
+    def clear_playlist(self, playlist_id: str) -> None:
+        """Remove all tracks from a playlist, leaving it empty.
+
+        Fetches current tracks via get_playlist_tracks, then removes them
+        in batches of 100 using playlist_remove_all_occurrences_of_items.
+        No-ops silently if the playlist is already empty.
+        Never raises — logs errors and returns.
+        """
+        try:
+            uris = self.get_playlist_tracks(playlist_id)
+            if not uris:
+                log.info(f"Playlist {playlist_id} is already empty")
+                return
+
+            sp = self.client
+            for i in range(0, len(uris), 100):
+                batch = uris[i : i + 100]
+                self._call_with_retry(
+                    lambda batch=batch: sp.playlist_remove_all_occurrences_of_items(
+                        playlist_id, batch
+                    ),
+                    context=f"clearing playlist {playlist_id} (batch of {len(batch)})",
+                )
+            log.info(f"Cleared {len(uris)} tracks from playlist {playlist_id}")
+        except Exception as e:
+            log.error(f"❌ Failed to clear playlist {playlist_id}: {e}", exc_info=True)
+
     def find_playlist_by_name(self, name: str):
         try:
             sp = (
@@ -444,3 +471,7 @@ def find_playlist_by_name(name: str):
 
 def get_playlist_tracks(playlist_id: str) -> list[str]:
     return _get_api().get_playlist_tracks(playlist_id)
+
+
+def clear_playlist(playlist_id: str) -> None:
+    _get_api().clear_playlist(playlist_id)
